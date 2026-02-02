@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NFC UID Reader</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔖 NFC UID Reader</h1>
+            <p class="subtitle">Read NFC card UID with one click</p>
+        </header>
+
+        <main>
+            <!-- Status Section -->
+            <section class="status-section">
+                <div class="status-indicator" id="statusIndicator">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Ready</span>
+                </div>
+            </section>
+
+            <!-- Reader Section -->
+            <section class="reader-section">
+                <div class="reader-info" id="readerInfo">
+                    <span class="reader-label">Reader:</span>
+                    <span class="reader-name" id="readerName">Checking...</span>
+                </div>
+            </section>
+
+            <!-- UID Display -->
+            <section class="uid-section">
+                <div class="uid-display" id="uidDisplay">
+                    <div class="uid-placeholder">Place card on reader and click "Read UID"</div>
+                </div>
+                <div class="uid-actions" id="uidActions" style="display: none;">
+                    <button class="btn btn-copy" onclick="copyUid()">
+                        📋 Copy UID
+                    </button>
+                </div>
+            </section>
+
+            <!-- Control Buttons -->
+            <section class="control-section">
+                <button class="btn btn-primary btn-large" id="readBtn" onclick="readUid()">
+                    <span class="btn-icon">📡</span>
+                    <span class="btn-text">Read UID</span>
+                </button>
+                <button class="btn btn-secondary" onclick="refreshReaders()">
+                    🔄 Refresh Readers
+                </button>
+            </section>
+
+            <!-- History Section -->
+            <section class="history-section">
+                <div class="history-header">
+                    <h2>📜 History</h2>
+                    <button class="btn btn-small btn-danger" onclick="clearHistory()">
+                        🗑️ Clear
+                    </button>
+                </div>
+                <div class="history-list" id="historyList">
+                    <div class="history-empty">No records yet</div>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>NFC Reader Web Interface v1.0</p>
+        </footer>
+    </div>
+
+    <!-- Toast Notification -->
+    <div class="toast" id="toast"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>

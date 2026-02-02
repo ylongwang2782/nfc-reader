@@ -1,0 +1,7 @@
+node_modules/
+venv_nfc/
+.pid
+server.log
+*.pyc
+__pycache__/
+.DS_Store
