@@ -86,6 +86,42 @@ app.post('/api/lite/apdu', async (req, res) => {
     }
 });
 
+// API: Get Type 4 card info
+app.get('/api/type4/info', async (req, res) => {
+    try {
+        const aid = req.query.aid || 'F00102030405';
+        const result = await getType4Info(aid);
+        res.json(result);
+    } catch (error) {
+        res.json({ success: false, error: error.message });
+    }
+});
+
+// API: Type 4 read operation
+app.post('/api/type4/read', async (req, res) => {
+    try {
+        const { aid, offset, length } = req.body;
+        const result = await type4Read(aid || 'F00102030405', offset || 0, length || 16);
+        res.json(result);
+    } catch (error) {
+        res.json({ success: false, error: error.message });
+    }
+});
+
+// API: Type 4 write operation
+app.post('/api/type4/write', async (req, res) => {
+    try {
+        const { aid, offset, data } = req.body;
+        if (!data) {
+            return res.json({ success: false, error: 'Data hex string required' });
+        }
+        const result = await type4Write(aid || 'F00102030405', offset || 0, data);
+        res.json(result);
+    } catch (error) {
+        res.json({ success: false, error: error.message });
+    }
+});
+
 // Function to read NFC UID
 function readNfcUid() {
     return new Promise((resolve, reject) => {
@@ -190,6 +226,105 @@ function getLiteInfo(version) {
 function sendRawApdu(apduHex) {
     return new Promise((resolve, reject) => {
         const process = spawn(VENV_PYTHON, [READ_UID_SCRIPT, 'apdu', '1', apduHex]);
+        let stdout = '';
+        let stderr = '';
+
+        process.stdout.on('data', (data) => {
+            stdout += data.toString();
+        });
+
+        process.stderr.on('data', (data) => {
+            stderr += data.toString();
+        });
+
+        process.on('close', (code) => {
+            try {
+                const result = JSON.parse(stdout);
+                resolve(result);
+            } catch (e) {
+                resolve({
+                    success: false,
+                    error: stderr || stdout || 'Failed to parse response'
+                });
+            }
+        });
+
+        process.on('error', (err) => {
+            resolve({ success: false, error: `Failed to execute script: ${err.message}` });
+        });
+    });
+}
+
+// Function to get Type 4 card info
+function getType4Info(aid) {
+    return new Promise((resolve, reject) => {
+        const process = spawn(VENV_PYTHON, [READ_UID_SCRIPT, 'type4', '1', aid]);
+        let stdout = '';
+        let stderr = '';
+
+        process.stdout.on('data', (data) => {
+            stdout += data.toString();
+        });
+
+        process.stderr.on('data', (data) => {
+            stderr += data.toString();
+        });
+
+        process.on('close', (code) => {
+            try {
+                const result = JSON.parse(stdout);
+                resolve(result);
+            } catch (e) {
+                resolve({
+                    success: false,
+                    error: stderr || stdout || 'Failed to parse response'
+                });
+            }
+        });
+
+        process.on('error', (err) => {
+            resolve({ success: false, error: `Failed to execute script: ${err.message}` });
+        });
+    });
+}
+
+// Function to read from Type 4 card
+function type4Read(aid, offset, length) {
+    return new Promise((resolve, reject) => {
+        const process = spawn(VENV_PYTHON, [READ_UID_SCRIPT, 'type4_read', '1', aid, String(offset), String(length)]);
+        let stdout = '';
+        let stderr = '';
+
+        process.stdout.on('data', (data) => {
+            stdout += data.toString();
+        });
+
+        process.stderr.on('data', (data) => {
+            stderr += data.toString();
+        });
+
+        process.on('close', (code) => {
+            try {
+                const result = JSON.parse(stdout);
+                resolve(result);
+            } catch (e) {
+                resolve({
+                    success: false,
+                    error: stderr || stdout || 'Failed to parse response'
+                });
+            }
+        });
+
+        process.on('error', (err) => {
+            resolve({ success: false, error: `Failed to execute script: ${err.message}` });
+        });
+    });
+}
+
+// Function to write to Type 4 card
+function type4Write(aid, offset, dataHex) {
+    return new Promise((resolve, reject) => {
+        const process = spawn(VENV_PYTHON, [READ_UID_SCRIPT, 'type4_write', '1', aid, String(offset), dataHex]);
         let stdout = '';
         let stderr = '';
 

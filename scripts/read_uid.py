@@ -348,6 +348,160 @@ def send_raw_apdu(reader_index=1, apdu_hex=""):
         return {"success": False, "error": str(e)}
 
 
+# Type 4 Card Functions
+def type4_select(connection, aid_hex):
+    """Select application by AID"""
+    try:
+        aid = [int(aid_hex[i:i+2], 16) for i in range(0, len(aid_hex), 2)]
+    except ValueError:
+        return False, "0000", "Invalid AID hex"
+    apdu = [0x00, 0xA4, 0x04, 0x00, len(aid)] + aid + [0x00]
+    data, sw1, sw2 = send_apdu(connection, apdu)
+    response = toHexString(data) if data else ""
+    return sw1 == 0x90, format_sw(sw1, sw2), response
+
+
+def type4_read(connection, offset, length):
+    """Read data from card"""
+    offset_hi = (offset >> 8) & 0xFF
+    offset_lo = offset & 0xFF
+    apdu = [0x00, 0xB0, offset_hi, offset_lo, length]
+    data, sw1, sw2 = send_apdu(connection, apdu)
+    response = toHexString(data) if data else ""
+    return sw1 == 0x90, format_sw(sw1, sw2), response
+
+
+def type4_write(connection, offset, data_hex):
+    """Write data to card"""
+    try:
+        write_data = [int(data_hex[i:i+2], 16) for i in range(0, len(data_hex), 2)]
+    except ValueError:
+        return False, "0000", "Invalid data hex"
+    offset_hi = (offset >> 8) & 0xFF
+    offset_lo = offset & 0xFF
+    apdu = [0x00, 0xD0, offset_hi, offset_lo, len(write_data)] + write_data
+    data, sw1, sw2 = send_apdu(connection, apdu)
+    response = toHexString(data) if data else ""
+    return sw1 == 0x90, format_sw(sw1, sw2), response
+
+
+def get_type4_info(reader_index=1, aid_hex="F00102030405"):
+    """Get Type 4 card info - select app and read basic info"""
+    try:
+        r_list = readers()
+        if len(r_list) == 0:
+            return {"success": False, "error": "No NFC readers found"}
+
+        if reader_index >= len(r_list):
+            reader_index = 0
+
+        target_reader = r_list[reader_index]
+        reader_name = str(target_reader)
+
+        try:
+            connection = target_reader.createConnection()
+            connection.connect()
+
+            # Get ATR
+            atr = connection.getATR()
+            atr_hex = toHexString(atr) if atr else ""
+
+            # Get UID
+            cmd = [0xFF, 0xCA, 0x00, 0x00, 0x00]
+            data, sw1, sw2 = send_apdu(connection, cmd)
+            uid = toHexString(data) if sw1 == 0x90 and data else ""
+
+            result = {
+                "success": True,
+                "reader": reader_name,
+                "atr": atr_hex,
+                "uid": uid,
+                "aid": aid_hex.upper(),
+                "selected": False,
+                "select_sw": "",
+                "select_response": ""
+            }
+
+            # Select application
+            ok, sw, response = type4_select(connection, aid_hex)
+            result["selected"] = ok
+            result["select_sw"] = sw
+            result["select_response"] = response
+
+            return result
+
+        except NoCardException:
+            return {"success": False, "error": "No card present - please place card on reader", "reader": reader_name}
+        except CardConnectionException as e:
+            return {"success": False, "error": f"Card connection error: {str(e)}", "reader": reader_name}
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def type4_operation(reader_index=1, operation="read", aid_hex="F00102030405", offset=0, length=16, data_hex=""):
+    """Perform Type 4 card operation"""
+    try:
+        r_list = readers()
+        if len(r_list) == 0:
+            return {"success": False, "error": "No NFC readers found"}
+
+        if reader_index >= len(r_list):
+            reader_index = 0
+
+        target_reader = r_list[reader_index]
+        reader_name = str(target_reader)
+
+        try:
+            connection = target_reader.createConnection()
+            connection.connect()
+
+            result = {
+                "success": True,
+                "reader": reader_name,
+                "operation": operation,
+                "select_ok": False,
+                "select_sw": "",
+                "operation_ok": False,
+                "operation_sw": "",
+                "data": ""
+            }
+
+            # Select application first
+            ok, sw, _ = type4_select(connection, aid_hex)
+            result["select_ok"] = ok
+            result["select_sw"] = sw
+
+            if not ok:
+                result["success"] = False
+                result["error"] = f"Select failed: SW={sw}"
+                return result
+
+            # Perform operation
+            if operation == "read":
+                ok, sw, data = type4_read(connection, offset, length)
+                result["operation_ok"] = ok
+                result["operation_sw"] = sw
+                result["data"] = data
+            elif operation == "write":
+                ok, sw, _ = type4_write(connection, offset, data_hex)
+                result["operation_ok"] = ok
+                result["operation_sw"] = sw
+            else:
+                result["success"] = False
+                result["error"] = f"Unknown operation: {operation}"
+
+            return result
+
+        except NoCardException:
+            return {"success": False, "error": "No card present - please place card on reader", "reader": reader_name}
+        except CardConnectionException as e:
+            return {"success": False, "error": f"Card connection error: {str(e)}", "reader": reader_name}
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
 def main():
     if len(sys.argv) < 2:
         print(json.dumps({"success": False, "error": "No command specified"}))
@@ -368,6 +522,22 @@ def main():
         reader_index = int(sys.argv[2]) if len(sys.argv) > 2 else 1
         apdu_hex = sys.argv[3] if len(sys.argv) > 3 else ""
         result = send_raw_apdu(reader_index, apdu_hex)
+    elif command == "type4":
+        reader_index = int(sys.argv[2]) if len(sys.argv) > 2 else 1
+        aid_hex = sys.argv[3] if len(sys.argv) > 3 else "F00102030405"
+        result = get_type4_info(reader_index, aid_hex)
+    elif command == "type4_read":
+        reader_index = int(sys.argv[2]) if len(sys.argv) > 2 else 1
+        aid_hex = sys.argv[3] if len(sys.argv) > 3 else "F00102030405"
+        offset = int(sys.argv[4]) if len(sys.argv) > 4 else 0
+        length = int(sys.argv[5]) if len(sys.argv) > 5 else 16
+        result = type4_operation(reader_index, "read", aid_hex, offset, length)
+    elif command == "type4_write":
+        reader_index = int(sys.argv[2]) if len(sys.argv) > 2 else 1
+        aid_hex = sys.argv[3] if len(sys.argv) > 3 else "F00102030405"
+        offset = int(sys.argv[4]) if len(sys.argv) > 4 else 0
+        data_hex = sys.argv[5] if len(sys.argv) > 5 else ""
+        result = type4_operation(reader_index, "write", aid_hex, offset, 0, data_hex)
     else:
         result = {"success": False, "error": f"Unknown command: {command}"}
 

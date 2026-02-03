@@ -295,9 +295,162 @@ async function sendApdu() {
     }
 }
 
+// Type 4 Card Functions
+let isReadingType4 = false;
+const type4Aid = document.getElementById('type4Aid');
+const type4Info = document.getElementById('type4Info');
+const type4Operations = document.getElementById('type4Operations');
+
+async function readType4Info() {
+    if (isReadingType4) return;
+
+    isReadingType4 = true;
+    const btn = document.getElementById('readType4Btn');
+    btn.disabled = true;
+    btn.classList.add('loading');
+    setStatus('reading', 'Connecting...');
+
+    type4Info.innerHTML = '<div class="type4-placeholder">Connecting to card...</div>';
+    type4Operations.style.display = 'none';
+
+    try {
+        const aid = type4Aid.value.replace(/\s/g, '');
+        const response = await fetch(`/api/type4/info?aid=${aid}`);
+        const data = await response.json();
+
+        if (data.success) {
+            const selectedClass = data.selected ? 'status-set' : 'status-not-set';
+            type4Info.innerHTML = `
+                <div class="type4-info-grid">
+                    <div class="info-item">
+                        <span class="info-label">UID</span>
+                        <span class="info-value">${data.uid || 'N/A'}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">ATR</span>
+                        <span class="info-value atr-value">${data.atr || 'N/A'}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">AID</span>
+                        <span class="info-value">${data.aid || 'N/A'}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Select Status</span>
+                        <span class="info-value ${selectedClass}">${data.selected ? 'OK' : 'Failed'} (${data.select_sw})</span>
+                    </div>
+                </div>
+            `;
+
+            if (data.selected) {
+                type4Operations.style.display = 'block';
+                showToast('Card connected!', 'success');
+            } else {
+                showToast(`Select failed: ${data.select_sw}`, 'error');
+            }
+            setStatus('', 'Connected');
+        } else {
+            type4Info.innerHTML = `<div class="type4-error">${data.error}</div>`;
+            type4Operations.style.display = 'none';
+            setStatus('error', 'Failed');
+            showToast(data.error, 'error');
+        }
+    } catch (error) {
+        type4Info.innerHTML = '<div class="type4-error">Connection error</div>';
+        type4Operations.style.display = 'none';
+        setStatus('error', 'Error');
+        showToast('Failed to connect to server', 'error');
+    } finally {
+        isReadingType4 = false;
+        btn.disabled = false;
+        btn.classList.remove('loading');
+    }
+}
+
+function switchTab(tab) {
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(content => content.style.display = 'none');
+
+    if (tab === 'read') {
+        document.querySelector('.tab-btn:first-child').classList.add('active');
+        document.getElementById('tabRead').style.display = 'block';
+    } else {
+        document.querySelector('.tab-btn:last-child').classList.add('active');
+        document.getElementById('tabWrite').style.display = 'block';
+    }
+}
+
+async function type4Read() {
+    const aid = type4Aid.value.replace(/\s/g, '');
+    const offset = parseInt(document.getElementById('readOffset').value) || 0;
+    const length = parseInt(document.getElementById('readLength').value) || 16;
+    const resultDiv = document.getElementById('readResult');
+
+    resultDiv.innerHTML = '<div class="result-placeholder">Reading...</div>';
+
+    try {
+        const response = await fetch('/api/type4/read', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ aid, offset, length })
+        });
+        const data = await response.json();
+
+        if (data.success && data.operation_ok) {
+            resultDiv.innerHTML = `
+                <div class="result-success">
+                    <div class="result-row"><span class="result-label">SW:</span> <span class="sw-ok">${data.operation_sw}</span></div>
+                    <div class="result-row"><span class="result-label">Data:</span></div>
+                    <div class="result-data">${data.data || '(empty)'}</div>
+                </div>
+            `;
+        } else {
+            resultDiv.innerHTML = `<div class="result-error">Read failed: ${data.error || data.operation_sw}</div>`;
+        }
+    } catch (error) {
+        resultDiv.innerHTML = '<div class="result-error">Connection error</div>';
+    }
+}
+
+async function type4Write() {
+    const aid = type4Aid.value.replace(/\s/g, '');
+    const offset = parseInt(document.getElementById('writeOffset').value) || 0;
+    const dataHex = document.getElementById('writeData').value.replace(/\s/g, '');
+    const resultDiv = document.getElementById('writeResult');
+
+    if (!dataHex) {
+        showToast('Please enter data to write', 'error');
+        return;
+    }
+
+    resultDiv.innerHTML = '<div class="result-placeholder">Writing...</div>';
+
+    try {
+        const response = await fetch('/api/type4/write', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ aid, offset, data: dataHex })
+        });
+        const data = await response.json();
+
+        if (data.success && data.operation_ok) {
+            resultDiv.innerHTML = `
+                <div class="result-success">
+                    <div class="result-row"><span class="result-label">SW:</span> <span class="sw-ok">${data.operation_sw}</span></div>
+                    <div class="result-row">Write successful!</div>
+                </div>
+            `;
+            showToast('Write successful!', 'success');
+        } else {
+            resultDiv.innerHTML = `<div class="result-error">Write failed: ${data.error || data.operation_sw}</div>`;
+        }
+    } catch (error) {
+        resultDiv.innerHTML = '<div class="result-error">Connection error</div>';
+    }
+}
+
 // Keyboard shortcut: Space to read
 document.addEventListener('keydown', (e) => {
-    if (e.code === 'Space' && !isReading && !isReadingLite && document.activeElement.tagName !== 'INPUT') {
+    if (e.code === 'Space' && !isReading && !isReadingLite && !isReadingType4 && document.activeElement.tagName !== 'INPUT') {
         e.preventDefault();
         readUid();
     }
