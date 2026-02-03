@@ -96,32 +96,95 @@ section {
     50% { opacity: 0.5; }
 }
 
-/* Reader Section */
-.reader-section {
-    text-align: center;
-}
-
-.reader-info {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 16px;
+/* NFC List Section */
+.nfc-list-section {
     background: var(--card-bg);
-    border-radius: 8px;
     border: 1px solid var(--card-border);
-    font-size: 0.875rem;
+    border-radius: 16px;
+    padding: 20px;
 }
 
-.reader-label {
-    color: var(--text-muted);
+.nfc-list-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
 }
 
-.reader-name {
+.nfc-list-header h2 {
+    font-size: 1rem;
     color: var(--text-secondary);
-    max-width: 300px;
+}
+
+.nfc-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.nfc-list-loading,
+.nfc-list-empty,
+.nfc-list-error {
+    text-align: center;
+    color: var(--text-muted);
+    padding: 16px;
+    font-size: 0.9rem;
+}
+
+.nfc-list-error {
+    color: var(--danger-color);
+}
+
+.nfc-reader-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: var(--bg-color);
+    border-radius: 8px;
+    border: 1px solid transparent;
+    transition: all 0.2s;
+}
+
+.nfc-reader-item.active {
+    border-color: var(--success-color);
+    background: rgba(16, 185, 129, 0.1);
+}
+
+.reader-status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.reader-status-dot.active {
+    background: var(--success-color);
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
+}
+
+.reader-details {
+    flex: 1;
+    min-width: 0;
+}
+
+.reader-details .reader-name {
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
+}
+
+.reader-index {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+.nfc-reader-item.active .reader-index {
+    color: var(--success-color);
 }
 
 /* UID Section */

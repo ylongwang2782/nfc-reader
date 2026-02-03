@@ -5,7 +5,7 @@ let isReadingLite = false;
 
 // DOM Elements
 const statusIndicator = document.getElementById('statusIndicator');
-const readerName = document.getElementById('readerName');
+const nfcList = document.getElementById('nfcList');
 const uidDisplay = document.getElementById('uidDisplay');
 const uidActions = document.getElementById('uidActions');
 const readBtn = document.getElementById('readBtn');
@@ -40,25 +40,35 @@ function showToast(message, type = 'success') {
 
 // Refresh readers
 async function refreshReaders() {
-    readerName.textContent = 'Checking...';
+    nfcList.innerHTML = '<div class="nfc-list-loading">Scanning...</div>';
     try {
         const response = await fetch('/api/readers');
         const data = await response.json();
 
         if (data.success && data.readers.length > 0) {
-            // Show the target reader (index 1 or 0 if only one)
             const targetIndex = data.readers.length > 1 ? 1 : 0;
-            readerName.textContent = data.readers[targetIndex];
+            nfcList.innerHTML = data.readers.map((reader, index) => {
+                const isActive = index === targetIndex;
+                return `
+                    <div class="nfc-reader-item ${isActive ? 'active' : ''}">
+                        <div class="reader-status-dot ${isActive ? 'active' : ''}"></div>
+                        <div class="reader-details">
+                            <div class="reader-name">${reader}</div>
+                            <div class="reader-index">${isActive ? 'Active' : `Index ${index}`}</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
             setStatus('', 'Ready');
         } else if (data.readers && data.readers.length === 0) {
-            readerName.textContent = 'No readers found';
+            nfcList.innerHTML = '<div class="nfc-list-empty">No readers found</div>';
             setStatus('error', 'No Reader');
         } else {
-            readerName.textContent = data.error || 'Error';
+            nfcList.innerHTML = `<div class="nfc-list-error">${data.error || 'Error'}</div>`;
             setStatus('error', 'Error');
         }
     } catch (error) {
-        readerName.textContent = 'Connection error';
+        nfcList.innerHTML = '<div class="nfc-list-error">Connection error</div>';
         setStatus('error', 'Offline');
     }
 }

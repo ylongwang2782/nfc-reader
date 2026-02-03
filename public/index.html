@@ -22,11 +22,16 @@
                 </div>
             </section>
 
-            <!-- Reader Section -->
-            <section class="reader-section">
-                <div class="reader-info" id="readerInfo">
-                    <span class="reader-label">Reader:</span>
-                    <span class="reader-name" id="readerName">Checking...</span>
+            <!-- NFC List Section -->
+            <section class="nfc-list-section">
+                <div class="nfc-list-header">
+                    <h2>📟 NFC Readers</h2>
+                    <button class="btn btn-small btn-secondary" onclick="refreshReaders()">
+                        🔄 Refresh
+                    </button>
+                </div>
+                <div class="nfc-list" id="nfcList">
+                    <div class="nfc-list-loading">Scanning...</div>
                 </div>
             </section>
 
@@ -47,9 +52,6 @@
                 <button class="btn btn-primary btn-large" id="readBtn" onclick="readUid()">
                     <span class="btn-icon">📡</span>
                     <span class="btn-text">Read UID</span>
-                </button>
-                <button class="btn btn-secondary" onclick="refreshReaders()">
-                    🔄 Refresh Readers
                 </button>
             </section>
 
