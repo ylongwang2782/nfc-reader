@@ -1,6 +1,7 @@
 // Global state
 let currentUid = '';
 let isReading = false;
+let isReadingLite = false;
 
 // DOM Elements
 const statusIndicator = document.getElementById('statusIndicator');
@@ -10,6 +11,11 @@ const uidActions = document.getElementById('uidActions');
 const readBtn = document.getElementById('readBtn');
 const historyList = document.getElementById('historyList');
 const toast = document.getElementById('toast');
+const liteVersion = document.getElementById('liteVersion');
+const liteInfo = document.getElementById('liteInfo');
+const readLiteBtn = document.getElementById('readLiteBtn');
+const apduInput = document.getElementById('apduInput');
+const apduOutput = document.getElementById('apduOutput');
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
@@ -174,9 +180,114 @@ async function clearHistory() {
     }
 }
 
+// Read OneKey Lite info
+async function readLiteInfo() {
+    if (isReadingLite) return;
+
+    isReadingLite = true;
+    readLiteBtn.disabled = true;
+    readLiteBtn.classList.add('loading');
+    setStatus('reading', 'Reading Lite...');
+
+    liteInfo.innerHTML = '<div class="lite-placeholder">Reading card info...</div>';
+
+    try {
+        const version = liteVersion.value;
+        const response = await fetch(`/api/lite/info?version=${version}`);
+        const data = await response.json();
+
+        if (data.success) {
+            const pinStatusClass = data.pin_status === 'set' ? 'status-set' : 'status-not-set';
+            const backupStatusClass = data.backup_status === 'has_backup' ? 'status-set' : 'status-not-set';
+
+            liteInfo.innerHTML = `
+                <div class="lite-info-grid">
+                    <div class="info-item">
+                        <span class="info-label">Serial Number</span>
+                        <span class="info-value">${data.serial_number || 'N/A'}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">PIN Status</span>
+                        <span class="info-value ${pinStatusClass}">${formatStatus(data.pin_status)}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Backup Status</span>
+                        <span class="info-value ${backupStatusClass}">${formatStatus(data.backup_status)}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">PIN Retry Count</span>
+                        <span class="info-value">${data.pin_retry_count !== null ? data.pin_retry_count : 'N/A'}</span>
+                    </div>
+                </div>
+                ${data.errors && data.errors.length > 0 ? `<div class="lite-errors">Warnings: ${data.errors.join(', ')}</div>` : ''}
+            `;
+            setStatus('', 'Success');
+            showToast('Lite info read successfully!', 'success');
+        } else {
+            liteInfo.innerHTML = `<div class="lite-error">❌ ${data.error}</div>`;
+            setStatus('error', 'Failed');
+            showToast(data.error, 'error');
+        }
+    } catch (error) {
+        liteInfo.innerHTML = '<div class="lite-error">❌ Connection error</div>';
+        setStatus('error', 'Error');
+        showToast('Failed to connect to server', 'error');
+    } finally {
+        isReadingLite = false;
+        readLiteBtn.disabled = false;
+        readLiteBtn.classList.remove('loading');
+    }
+}
+
+// Format status for display
+function formatStatus(status) {
+    const statusMap = {
+        'set': 'Set',
+        'not_set': 'Not Set',
+        'has_backup': 'Has Backup',
+        'no_backup': 'No Backup',
+        'unknown': 'Unknown'
+    };
+    return statusMap[status] || status || 'N/A';
+}
+
+// Send raw APDU command
+async function sendApdu() {
+    const apdu = apduInput.value.replace(/\s/g, '');
+    if (!apdu) {
+        showToast('Please enter APDU hex string', 'error');
+        return;
+    }
+
+    apduOutput.innerHTML = '<div class="debug-placeholder">Sending...</div>';
+
+    try {
+        const response = await fetch('/api/lite/apdu', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ apdu })
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            apduOutput.innerHTML = `
+                <div class="apdu-result">
+                    <div class="apdu-row"><span class="apdu-label">APDU:</span> <span class="apdu-value">${data.apdu}</span></div>
+                    <div class="apdu-row"><span class="apdu-label">Response:</span> <span class="apdu-value">${data.response || '(empty)'}</span></div>
+                    <div class="apdu-row"><span class="apdu-label">SW:</span> <span class="apdu-value sw-${data.sw === '9000' ? 'ok' : 'err'}">${data.sw}</span></div>
+                </div>
+            `;
+        } else {
+            apduOutput.innerHTML = `<div class="debug-error">❌ ${data.error}</div>`;
+        }
+    } catch (error) {
+        apduOutput.innerHTML = '<div class="debug-error">❌ Connection error</div>';
+    }
+}
+
 // Keyboard shortcut: Space to read
 document.addEventListener('keydown', (e) => {
-    if (e.code === 'Space' && !isReading && document.activeElement.tagName !== 'INPUT') {
+    if (e.code === 'Space' && !isReading && !isReadingLite && document.activeElement.tagName !== 'INPUT') {
         e.preventDefault();
         readUid();
     }

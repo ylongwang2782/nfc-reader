@@ -382,3 +382,200 @@ footer {
 .loading .btn-icon {
     animation: spin 1s linear infinite;
 }
+
+/* OneKey Lite Section */
+.lite-section {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 16px;
+    padding: 20px;
+}
+
+.lite-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.lite-header h2 {
+    font-size: 1rem;
+    color: var(--text-secondary);
+}
+
+.version-select {
+    background: var(--bg-color);
+    color: var(--text-primary);
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+
+.version-select:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
+.lite-controls {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 16px;
+}
+
+.lite-info {
+    min-height: 80px;
+}
+
+.lite-placeholder {
+    text-align: center;
+    color: var(--text-muted);
+    padding: 20px;
+}
+
+.lite-error {
+    text-align: center;
+    color: var(--danger-color);
+    padding: 20px;
+}
+
+.lite-info-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+}
+
+.info-item {
+    background: var(--bg-color);
+    border-radius: 8px;
+    padding: 12px;
+}
+
+.info-label {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+}
+
+.info-value {
+    font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    word-break: break-all;
+}
+
+.status-set {
+    color: var(--success-color);
+}
+
+.status-not-set {
+    color: var(--warning-color);
+}
+
+.lite-errors {
+    margin-top: 12px;
+    padding: 8px 12px;
+    background: rgba(239, 68, 68, 0.1);
+    border-radius: 8px;
+    font-size: 0.8rem;
+    color: var(--danger-color);
+}
+
+/* Debug Section */
+.debug-section {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 16px;
+}
+
+.debug-section details {
+    padding: 16px 20px;
+}
+
+.debug-section summary {
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    user-select: none;
+}
+
+.debug-section summary:hover {
+    color: var(--text-primary);
+}
+
+.debug-content {
+    margin-top: 16px;
+}
+
+.debug-input {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.apdu-input {
+    flex: 1;
+    background: var(--bg-color);
+    color: var(--text-primary);
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+    font-size: 0.9rem;
+}
+
+.apdu-input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
+.apdu-input::placeholder {
+    color: var(--text-muted);
+}
+
+.debug-output {
+    background: var(--bg-color);
+    border-radius: 8px;
+    padding: 12px;
+    min-height: 60px;
+}
+
+.debug-placeholder {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+.debug-error {
+    color: var(--danger-color);
+}
+
+.apdu-result {
+    font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+    font-size: 0.85rem;
+}
+
+.apdu-row {
+    margin-bottom: 4px;
+}
+
+.apdu-row:last-child {
+    margin-bottom: 0;
+}
+
+.apdu-label {
+    color: var(--text-muted);
+}
+
+.apdu-value {
+    color: var(--text-primary);
+}
+
+.sw-ok {
+    color: var(--success-color);
+}
+
+.sw-err {
+    color: var(--danger-color);
+}

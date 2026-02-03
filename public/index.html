@@ -53,6 +53,42 @@
                 </button>
             </section>
 
+            <!-- OneKey Lite Section -->
+            <section class="lite-section">
+                <div class="lite-header">
+                    <h2>💳 OneKey Lite</h2>
+                    <select id="liteVersion" class="version-select">
+                        <option value="v2">V2</option>
+                        <option value="v1">V1</option>
+                    </select>
+                </div>
+                <div class="lite-controls">
+                    <button class="btn btn-primary" id="readLiteBtn" onclick="readLiteInfo()">
+                        <span class="btn-icon">📱</span>
+                        <span class="btn-text">Read Lite Info</span>
+                    </button>
+                </div>
+                <div class="lite-info" id="liteInfo">
+                    <div class="lite-placeholder">Select version and click "Read Lite Info"</div>
+                </div>
+            </section>
+
+            <!-- APDU Debug Section -->
+            <section class="debug-section">
+                <details>
+                    <summary>🔧 APDU Debug</summary>
+                    <div class="debug-content">
+                        <div class="debug-input">
+                            <input type="text" id="apduInput" placeholder="Enter APDU hex (e.g., 00A4040000)" class="apdu-input">
+                            <button class="btn btn-secondary" onclick="sendApdu()">Send</button>
+                        </div>
+                        <div class="debug-output" id="apduOutput">
+                            <div class="debug-placeholder">Response will appear here</div>
+                        </div>
+                    </div>
+                </details>
+            </section>
+
             <!-- History Section -->
             <section class="history-section">
                 <div class="history-header">

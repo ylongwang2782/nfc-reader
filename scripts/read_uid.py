@@ -2,6 +2,7 @@
 """
 NFC UID Reader Script
 Reads NFC card UID using pyscard library
+Supports OneKey Lite card info reading
 """
 
 import sys
@@ -17,6 +18,12 @@ except ImportError:
         "error": "pyscard not installed. Run: pip install pyscard"
     }))
     sys.exit(1)
+
+# OneKey Lite APDU Constants
+APDU_SELECT = [0x00, 0xA4, 0x04, 0x00]
+AID_PRIMARY_SAFETY = []  # Select with no data for primary safety
+AID_BACKUP_V1 = [0xD1, 0x56, 0x00, 0x01, 0x32, 0x83, 0x40, 0x01]
+AID_BACKUP_V2 = [0x6F, 0x6E, 0x65, 0x6B, 0x65, 0x79, 0x2E, 0x62, 0x61, 0x63, 0x6B, 0x75, 0x70, 0x01]  # "onekey.backup" + 0x01
 
 
 def get_readers():
@@ -102,6 +109,245 @@ def read_uid(reader_index=1):
         }
 
 
+def send_apdu(connection, apdu):
+    """Send APDU and return response"""
+    data, sw1, sw2 = connection.transmit(apdu)
+    return data, sw1, sw2
+
+
+def format_sw(sw1, sw2):
+    """Format status word as hex string"""
+    return f"{sw1:02X}{sw2:02X}"
+
+
+def select_primary_safety(connection):
+    """Select primary safety domain"""
+    apdu = APDU_SELECT + [0x00]  # Lc = 0
+    data, sw1, sw2 = send_apdu(connection, apdu)
+    return sw1 == 0x90, format_sw(sw1, sw2), data
+
+
+def select_backup_applet(connection, version):
+    """Select backup applet (V1 or V2)"""
+    aid = AID_BACKUP_V1 if version == "v1" else AID_BACKUP_V2
+    apdu = APDU_SELECT + [len(aid)] + aid
+    data, sw1, sw2 = send_apdu(connection, apdu)
+    return sw1 == 0x90, format_sw(sw1, sw2), data
+
+
+def get_device_certificate(connection):
+    """Get device certificate"""
+    apdu = [0x80, 0xCA, 0xBF, 0x21, 0x06, 0xA6, 0x04, 0x83, 0x02, 0x15, 0x18, 0x00]
+    data, sw1, sw2 = send_apdu(connection, apdu)
+    if sw1 == 0x90:
+        return True, format_sw(sw1, sw2), toHexString(data)
+    return False, format_sw(sw1, sw2), None
+
+
+def get_backup_status(connection):
+    """Get backup status"""
+    apdu = [0x80, 0x6A, 0x00, 0x00, 0x00]
+    data, sw1, sw2 = send_apdu(connection, apdu)
+    if sw1 == 0x90 and len(data) > 0:
+        return True, format_sw(sw1, sw2), data[0]
+    return sw1 == 0x90, format_sw(sw1, sw2), None
+
+
+def get_pin_status(connection):
+    """Get PIN status"""
+    apdu = [0x80, 0xCB, 0x80, 0x00, 0x05, 0xDF, 0xFF, 0x02, 0x81, 0x05, 0x00]
+    data, sw1, sw2 = send_apdu(connection, apdu)
+    if sw1 == 0x90 and len(data) > 0:
+        return True, format_sw(sw1, sw2), data[0]
+    return sw1 == 0x90, format_sw(sw1, sw2), None
+
+
+def get_serial_number(connection):
+    """Get serial number"""
+    apdu = [0x80, 0xCB, 0x80, 0x00, 0x05, 0xDF, 0xFF, 0x02, 0x81, 0x01, 0x00]
+    data, sw1, sw2 = send_apdu(connection, apdu)
+    if sw1 == 0x90 and len(data) > 0:
+        return True, format_sw(sw1, sw2), toHexString(data)
+    return sw1 == 0x90, format_sw(sw1, sw2), None
+
+
+def get_pin_retry_count(connection):
+    """Get PIN retry count"""
+    apdu = [0x80, 0xCB, 0x80, 0x00, 0x05, 0xDF, 0xFF, 0x02, 0x81, 0x02, 0x00]
+    data, sw1, sw2 = send_apdu(connection, apdu)
+    if sw1 == 0x90 and len(data) > 0:
+        return True, format_sw(sw1, sw2), data[0]
+    return sw1 == 0x90, format_sw(sw1, sw2), None
+
+
+def interpret_backup_status(status_byte, version):
+    """Interpret backup status byte based on version"""
+    if status_byte is None:
+        return "unknown"
+    if version == "v1":
+        return "no_backup" if status_byte == 0x02 else "has_backup"
+    else:  # v2
+        return "no_backup" if status_byte == 0x00 else "has_backup" if status_byte == 0x02 else "unknown"
+
+
+def interpret_pin_status(status_byte, version):
+    """Interpret PIN status byte based on version"""
+    if status_byte is None:
+        return "unknown"
+    if version == "v1":
+        return "not_set" if status_byte == 0x02 else "set" if status_byte == 0x00 else "unknown"
+    else:  # v2
+        return "not_set" if status_byte == 0x02 else "set" if status_byte == 0x01 else "unknown"
+
+
+def get_lite_info(reader_index=1, version="v2"):
+    """Get all OneKey Lite card info"""
+    try:
+        r_list = readers()
+        if len(r_list) == 0:
+            return {"success": False, "error": "No NFC readers found"}
+
+        if reader_index >= len(r_list):
+            reader_index = 0
+
+        target_reader = r_list[reader_index]
+        reader_name = str(target_reader)
+
+        try:
+            connection = target_reader.createConnection()
+            connection.connect()
+
+            result = {
+                "success": True,
+                "reader": reader_name,
+                "version": version,
+                "serial_number": None,
+                "pin_status": None,
+                "pin_status_raw": None,
+                "backup_status": None,
+                "backup_status_raw": None,
+                "pin_retry_count": None,
+                "certificate": None,
+                "errors": []
+            }
+
+            # Get certificate first (card starts in primary safety context)
+            ok, sw, cert = get_device_certificate(connection)
+            if ok:
+                result["certificate"] = cert
+            else:
+                result["errors"].append(f"get_certificate failed: {sw}")
+
+            # For V1: select primary safety then get pin_status, serial_number, pin_retry
+            if version == "v1":
+                ok, sw, _ = select_primary_safety(connection)
+                if not ok:
+                    result["errors"].append(f"select_primary_safety failed: {sw}")
+                else:
+                    ok, sw, val = get_pin_status(connection)
+                    if ok:
+                        result["pin_status_raw"] = val
+                        result["pin_status"] = interpret_pin_status(val, version)
+                    else:
+                        result["errors"].append(f"get_pin_status failed: {sw}")
+
+                    ok, sw, val = get_serial_number(connection)
+                    if ok:
+                        result["serial_number"] = val
+                    else:
+                        result["errors"].append(f"get_serial_number failed: {sw}")
+
+                    ok, sw, val = get_pin_retry_count(connection)
+                    if ok:
+                        result["pin_retry_count"] = val
+                    elif sw != "6985":  # 6985 = PIN not set, retry count N/A
+                        result["errors"].append(f"get_pin_retry_count failed: {sw}")
+
+            # Select backup applet
+            ok, sw, _ = select_backup_applet(connection, version)
+            if not ok:
+                result["errors"].append(f"select_backup_applet failed: {sw}")
+            else:
+                # Get backup status (always from backup applet context)
+                ok, sw, val = get_backup_status(connection)
+                if ok:
+                    result["backup_status_raw"] = val
+                    result["backup_status"] = interpret_backup_status(val, version)
+                else:
+                    result["errors"].append(f"get_backup_status failed: {sw}")
+
+                # For V2: get pin_status, serial_number, pin_retry from backup applet
+                if version == "v2":
+                    ok, sw, val = get_pin_status(connection)
+                    if ok:
+                        result["pin_status_raw"] = val
+                        result["pin_status"] = interpret_pin_status(val, version)
+                    else:
+                        result["errors"].append(f"get_pin_status failed: {sw}")
+
+                    ok, sw, val = get_serial_number(connection)
+                    if ok:
+                        result["serial_number"] = val
+                    else:
+                        result["errors"].append(f"get_serial_number failed: {sw}")
+
+                    ok, sw, val = get_pin_retry_count(connection)
+                    if ok:
+                        result["pin_retry_count"] = val
+                    elif sw != "6985":  # 6985 = PIN not set, retry count N/A
+                        result["errors"].append(f"get_pin_retry_count failed: {sw}")
+
+            return result
+
+        except NoCardException:
+            return {"success": False, "error": "No card present - please place card on reader", "reader": reader_name}
+        except CardConnectionException as e:
+            return {"success": False, "error": f"Card connection error: {str(e)}", "reader": reader_name}
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def send_raw_apdu(reader_index=1, apdu_hex=""):
+    """Send raw APDU command"""
+    try:
+        r_list = readers()
+        if len(r_list) == 0:
+            return {"success": False, "error": "No NFC readers found"}
+
+        if reader_index >= len(r_list):
+            reader_index = 0
+
+        target_reader = r_list[reader_index]
+        reader_name = str(target_reader)
+
+        try:
+            apdu = [int(apdu_hex[i:i+2], 16) for i in range(0, len(apdu_hex), 2)]
+        except ValueError:
+            return {"success": False, "error": "Invalid APDU hex string"}
+
+        try:
+            connection = target_reader.createConnection()
+            connection.connect()
+
+            data, sw1, sw2 = send_apdu(connection, apdu)
+            return {
+                "success": True,
+                "reader": reader_name,
+                "apdu": apdu_hex.upper(),
+                "response": toHexString(data) if data else "",
+                "sw": format_sw(sw1, sw2)
+            }
+
+        except NoCardException:
+            return {"success": False, "error": "No card present - please place card on reader", "reader": reader_name}
+        except CardConnectionException as e:
+            return {"success": False, "error": f"Card connection error: {str(e)}", "reader": reader_name}
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
 def main():
     if len(sys.argv) < 2:
         print(json.dumps({"success": False, "error": "No command specified"}))
@@ -114,6 +360,14 @@ def main():
     elif command == "read":
         reader_index = int(sys.argv[2]) if len(sys.argv) > 2 else 1
         result = read_uid(reader_index)
+    elif command == "lite":
+        reader_index = int(sys.argv[2]) if len(sys.argv) > 2 else 1
+        version = sys.argv[3] if len(sys.argv) > 3 else "v2"
+        result = get_lite_info(reader_index, version)
+    elif command == "apdu":
+        reader_index = int(sys.argv[2]) if len(sys.argv) > 2 else 1
+        apdu_hex = sys.argv[3] if len(sys.argv) > 3 else ""
+        result = send_raw_apdu(reader_index, apdu_hex)
     else:
         result = {"success": False, "error": f"Unknown command: {command}"}
 

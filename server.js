@@ -61,6 +61,31 @@ app.get('/api/readers', async (req, res) => {
     }
 });
 
+// API: Get OneKey Lite card info
+app.get('/api/lite/info', async (req, res) => {
+    try {
+        const version = req.query.version || 'v2';
+        const result = await getLiteInfo(version);
+        res.json(result);
+    } catch (error) {
+        res.json({ success: false, error: error.message });
+    }
+});
+
+// API: Send raw APDU command
+app.post('/api/lite/apdu', async (req, res) => {
+    try {
+        const { apdu } = req.body;
+        if (!apdu) {
+            return res.json({ success: false, error: 'APDU hex string required' });
+        }
+        const result = await sendRawApdu(apdu);
+        res.json(result);
+    } catch (error) {
+        res.json({ success: false, error: error.message });
+    }
+});
+
 // Function to read NFC UID
 function readNfcUid() {
     return new Promise((resolve, reject) => {
@@ -124,6 +149,72 @@ function getReaders() {
 
         process.on('error', (err) => {
             resolve({ success: false, error: `Failed to execute script: ${err.message}`, readers: [] });
+        });
+    });
+}
+
+// Function to get OneKey Lite info
+function getLiteInfo(version) {
+    return new Promise((resolve, reject) => {
+        const process = spawn(VENV_PYTHON, [READ_UID_SCRIPT, 'lite', '1', version]);
+        let stdout = '';
+        let stderr = '';
+
+        process.stdout.on('data', (data) => {
+            stdout += data.toString();
+        });
+
+        process.stderr.on('data', (data) => {
+            stderr += data.toString();
+        });
+
+        process.on('close', (code) => {
+            try {
+                const result = JSON.parse(stdout);
+                resolve(result);
+            } catch (e) {
+                resolve({
+                    success: false,
+                    error: stderr || stdout || 'Failed to parse response'
+                });
+            }
+        });
+
+        process.on('error', (err) => {
+            resolve({ success: false, error: `Failed to execute script: ${err.message}` });
+        });
+    });
+}
+
+// Function to send raw APDU
+function sendRawApdu(apduHex) {
+    return new Promise((resolve, reject) => {
+        const process = spawn(VENV_PYTHON, [READ_UID_SCRIPT, 'apdu', '1', apduHex]);
+        let stdout = '';
+        let stderr = '';
+
+        process.stdout.on('data', (data) => {
+            stdout += data.toString();
+        });
+
+        process.stderr.on('data', (data) => {
+            stderr += data.toString();
+        });
+
+        process.on('close', (code) => {
+            try {
+                const result = JSON.parse(stdout);
+                resolve(result);
+            } catch (e) {
+                resolve({
+                    success: false,
+                    error: stderr || stdout || 'Failed to parse response'
+                });
+            }
+        });
+
+        process.on('error', (err) => {
+            resolve({ success: false, error: `Failed to execute script: ${err.message}` });
         });
     });
 }
