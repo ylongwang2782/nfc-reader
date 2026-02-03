@@ -503,45 +503,152 @@ def type4_operation(reader_index=1, operation="read", aid_hex="F00102030405", of
 
 
 def main():
-    if len(sys.argv) < 2:
-        print(json.dumps({"success": False, "error": "No command specified"}))
-        sys.exit(1)
+    import argparse
 
-    command = sys.argv[1]
+    parser = argparse.ArgumentParser(
+        description='NFC Card Reader CLI - Read NFC cards and communicate with Type 4 / OneKey Lite cards',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog='''
+Examples:
+  %(prog)s list                          List available NFC readers
+  %(prog)s uid                           Read card UID
+  %(prog)s uid -r 0                      Read UID using reader index 0
+  %(prog)s apdu 00A4040000               Send raw APDU command
+  %(prog)s lite                          Read OneKey Lite card info (V2)
+  %(prog)s lite -v v1                    Read OneKey Lite V1 card info
+  %(prog)s type4                         Connect to Type 4 card
+  %(prog)s type4 -a D276000085010100     Connect with custom AID
+  %(prog)s type4 read -o 0 -l 32         Read 32 bytes from offset 0
+  %(prog)s type4 write -o 0 -d 48454C4C4F  Write "HELLO" at offset 0
+'''
+    )
+    parser.add_argument('-r', '--reader', type=int, default=1, help='Reader index (default: 1)')
+    parser.add_argument('--json', action='store_true', help='Output raw JSON')
+    parser.add_argument('--pretty', action='store_true', help='Force human-readable output')
 
-    if command == "list":
+    subparsers = parser.add_subparsers(dest='command', help='Available commands')
+
+    # list command
+    list_parser = subparsers.add_parser('list', help='List available NFC readers')
+
+    # uid command
+    uid_parser = subparsers.add_parser('uid', help='Read card UID')
+
+    # apdu command
+    apdu_parser = subparsers.add_parser('apdu', help='Send raw APDU command')
+    apdu_parser.add_argument('apdu_hex', help='APDU command in hex (e.g., 00A4040000)')
+
+    # lite command
+    lite_parser = subparsers.add_parser('lite', help='Read OneKey Lite card info')
+    lite_parser.add_argument('-v', '--version', choices=['v1', 'v2'], default='v2', help='Card version (default: v2)')
+
+    # type4 command
+    type4_parser = subparsers.add_parser('type4', help='Type 4 card operations')
+    type4_parser.add_argument('-a', '--aid', default='F00102030405', help='Application ID in hex (default: F00102030405)')
+    type4_sub = type4_parser.add_subparsers(dest='type4_cmd', help='Type 4 operations')
+
+    # type4 read
+    type4_read = type4_sub.add_parser('read', help='Read data from card')
+    type4_read.add_argument('-o', '--offset', type=int, default=0, help='Read offset (default: 0)')
+    type4_read.add_argument('-l', '--length', type=int, default=16, help='Read length (default: 16)')
+
+    # type4 write
+    type4_write = type4_sub.add_parser('write', help='Write data to card')
+    type4_write.add_argument('-o', '--offset', type=int, default=0, help='Write offset (default: 0)')
+    type4_write.add_argument('-d', '--data', required=True, help='Data to write in hex')
+
+    args = parser.parse_args()
+
+    # Check if output is piped
+    is_tty = sys.stdout.isatty()
+    use_json = args.json or (not is_tty and not args.pretty)
+
+    # Execute command
+    result = None
+    if args.command == 'list':
         result = get_readers()
-    elif command == "read":
-        reader_index = int(sys.argv[2]) if len(sys.argv) > 2 else 1
-        result = read_uid(reader_index)
-    elif command == "lite":
-        reader_index = int(sys.argv[2]) if len(sys.argv) > 2 else 1
-        version = sys.argv[3] if len(sys.argv) > 3 else "v2"
-        result = get_lite_info(reader_index, version)
-    elif command == "apdu":
-        reader_index = int(sys.argv[2]) if len(sys.argv) > 2 else 1
-        apdu_hex = sys.argv[3] if len(sys.argv) > 3 else ""
-        result = send_raw_apdu(reader_index, apdu_hex)
-    elif command == "type4":
-        reader_index = int(sys.argv[2]) if len(sys.argv) > 2 else 1
-        aid_hex = sys.argv[3] if len(sys.argv) > 3 else "F00102030405"
-        result = get_type4_info(reader_index, aid_hex)
-    elif command == "type4_read":
-        reader_index = int(sys.argv[2]) if len(sys.argv) > 2 else 1
-        aid_hex = sys.argv[3] if len(sys.argv) > 3 else "F00102030405"
-        offset = int(sys.argv[4]) if len(sys.argv) > 4 else 0
-        length = int(sys.argv[5]) if len(sys.argv) > 5 else 16
-        result = type4_operation(reader_index, "read", aid_hex, offset, length)
-    elif command == "type4_write":
-        reader_index = int(sys.argv[2]) if len(sys.argv) > 2 else 1
-        aid_hex = sys.argv[3] if len(sys.argv) > 3 else "F00102030405"
-        offset = int(sys.argv[4]) if len(sys.argv) > 4 else 0
-        data_hex = sys.argv[5] if len(sys.argv) > 5 else ""
-        result = type4_operation(reader_index, "write", aid_hex, offset, 0, data_hex)
+    elif args.command == 'uid':
+        result = read_uid(args.reader)
+    elif args.command == 'apdu':
+        result = send_raw_apdu(args.reader, args.apdu_hex)
+    elif args.command == 'lite':
+        result = get_lite_info(args.reader, args.version)
+    elif args.command == 'type4':
+        if args.type4_cmd == 'read':
+            result = type4_operation(args.reader, 'read', args.aid, args.offset, args.length)
+        elif args.type4_cmd == 'write':
+            result = type4_operation(args.reader, 'write', args.aid, args.offset, 0, args.data)
+        else:
+            result = get_type4_info(args.reader, args.aid)
     else:
-        result = {"success": False, "error": f"Unknown command: {command}"}
+        parser.print_help()
+        sys.exit(0)
 
-    print(json.dumps(result))
+    # Output result
+    if result:
+        if use_json:
+            print(json.dumps(result))
+        else:
+            print_formatted(result, args.command)
+
+
+def print_formatted(result, command):
+    """Print result in human-readable format"""
+    if not result.get('success', False):
+        print(f"\033[91mError:\033[0m {result.get('error', 'Unknown error')}")
+        return
+
+    if command == 'list':
+        print(f"\033[96mNFC Readers ({result.get('count', 0)}):\033[0m")
+        for i, reader in enumerate(result.get('readers', [])):
+            marker = '\033[92m*\033[0m' if i == 1 else ' '
+            print(f"  {marker} [{i}] {reader}")
+        if result.get('count', 0) > 1:
+            print(f"\n  \033[92m*\033[0m = default reader")
+
+    elif command == 'uid':
+        print(f"\033[96mCard UID:\033[0m {result.get('uid', 'N/A')}")
+        print(f"\033[90mReader: {result.get('reader', 'N/A')}\033[0m")
+
+    elif command == 'apdu':
+        sw = result.get('sw', '')
+        sw_color = '\033[92m' if sw == '9000' else '\033[91m'
+        print(f"\033[96mAPDU:\033[0m {result.get('apdu', '')}")
+        print(f"\033[96mSW:\033[0m {sw_color}{sw}\033[0m")
+        if result.get('response'):
+            print(f"\033[96mResponse:\033[0m {result.get('response')}")
+
+    elif command == 'lite':
+        print(f"\033[96mOneKey Lite ({result.get('version', 'v2').upper()}):\033[0m")
+        print(f"  Serial:      {result.get('serial_number', 'N/A')}")
+        pin = result.get('pin_status', 'unknown')
+        pin_color = '\033[92m' if pin == 'set' else '\033[93m'
+        print(f"  PIN Status:  {pin_color}{pin}\033[0m")
+        backup = result.get('backup_status', 'unknown')
+        backup_color = '\033[92m' if backup == 'has_backup' else '\033[93m'
+        print(f"  Backup:      {backup_color}{backup}\033[0m")
+        retry = result.get('pin_retry_count')
+        print(f"  PIN Retry:   {retry if retry is not None else 'N/A'}")
+        if result.get('errors'):
+            print(f"\033[93mWarnings:\033[0m {', '.join(result['errors'])}")
+
+    elif command == 'type4':
+        print(f"\033[96mType 4 Card:\033[0m")
+        print(f"  UID:    {result.get('uid', 'N/A')}")
+        print(f"  ATR:    {result.get('atr', 'N/A')}")
+        if 'aid' in result:
+            print(f"  AID:    {result.get('aid', 'N/A')}")
+            selected = result.get('selected', False)
+            sel_color = '\033[92m' if selected else '\033[91m'
+            sel_text = 'OK' if selected else 'Failed'
+            print(f"  Select: {sel_color}{sel_text} ({result.get('select_sw', '')})\033[0m")
+        if 'operation' in result:
+            op = result.get('operation', '')
+            op_ok = result.get('operation_ok', False)
+            op_color = '\033[92m' if op_ok else '\033[91m'
+            print(f"  {op.capitalize()}: {op_color}{result.get('operation_sw', '')}\033[0m")
+            if op == 'read' and result.get('data'):
+                print(f"  Data:   {result.get('data')}")
 
 
 if __name__ == "__main__":

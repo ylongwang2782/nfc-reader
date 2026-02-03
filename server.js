@@ -125,7 +125,7 @@ app.post('/api/type4/write', async (req, res) => {
 // Function to read NFC UID
 function readNfcUid() {
     return new Promise((resolve, reject) => {
-        const process = spawn(VENV_PYTHON, [READ_UID_SCRIPT, 'read']);
+        const process = spawn(VENV_PYTHON, [READ_UID_SCRIPT, 'uid']);
         let stdout = '';
         let stderr = '';
 
@@ -192,7 +192,7 @@ function getReaders() {
 // Function to get OneKey Lite info
 function getLiteInfo(version) {
     return new Promise((resolve, reject) => {
-        const process = spawn(VENV_PYTHON, [READ_UID_SCRIPT, 'lite', '1', version]);
+        const process = spawn(VENV_PYTHON, [READ_UID_SCRIPT, 'lite', '-v', version]);
         let stdout = '';
         let stderr = '';
 
@@ -225,7 +225,7 @@ function getLiteInfo(version) {
 // Function to send raw APDU
 function sendRawApdu(apduHex) {
     return new Promise((resolve, reject) => {
-        const process = spawn(VENV_PYTHON, [READ_UID_SCRIPT, 'apdu', '1', apduHex]);
+        const process = spawn(VENV_PYTHON, [READ_UID_SCRIPT, 'apdu', apduHex]);
         let stdout = '';
         let stderr = '';
 
@@ -258,7 +258,7 @@ function sendRawApdu(apduHex) {
 // Function to get Type 4 card info
 function getType4Info(aid) {
     return new Promise((resolve, reject) => {
-        const process = spawn(VENV_PYTHON, [READ_UID_SCRIPT, 'type4', '1', aid]);
+        const process = spawn(VENV_PYTHON, [READ_UID_SCRIPT, 'type4', '-a', aid]);
         let stdout = '';
         let stderr = '';
 
@@ -291,7 +291,7 @@ function getType4Info(aid) {
 // Function to read from Type 4 card
 function type4Read(aid, offset, length) {
     return new Promise((resolve, reject) => {
-        const process = spawn(VENV_PYTHON, [READ_UID_SCRIPT, 'type4_read', '1', aid, String(offset), String(length)]);
+        const process = spawn(VENV_PYTHON, [READ_UID_SCRIPT, 'type4', '-a', aid, 'read', '-o', String(offset), '-l', String(length)]);
         let stdout = '';
         let stderr = '';
 
@@ -324,7 +324,7 @@ function type4Read(aid, offset, length) {
 // Function to write to Type 4 card
 function type4Write(aid, offset, dataHex) {
     return new Promise((resolve, reject) => {
-        const process = spawn(VENV_PYTHON, [READ_UID_SCRIPT, 'type4_write', '1', aid, String(offset), dataHex]);
+        const process = spawn(VENV_PYTHON, [READ_UID_SCRIPT, 'type4', '-a', aid, 'write', '-o', String(offset), '-d', dataHex]);
         let stdout = '';
         let stderr = '';
 
