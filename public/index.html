@@ -16,9 +16,14 @@
         <main>
             <!-- Status Section -->
             <section class="status-section">
-                <div class="status-indicator" id="statusIndicator">
-                    <span class="status-dot"></span>
-                    <span class="status-text">Ready</span>
+                <div class="status-row">
+                    <div class="status-indicator" id="statusIndicator">
+                        <span class="status-dot"></span>
+                        <span class="status-text">Ready</span>
+                    </div>
+                    <button class="btn btn-small btn-danger" id="stopServerBtn" onclick="stopServer()">
+                        ⏹ Stop
+                    </button>
                 </div>
             </section>
 
@@ -83,7 +88,7 @@
                 <div class="type4-config">
                     <div class="config-row">
                         <label>AID:</label>
-                        <input type="text" id="type4Aid" value="F00102030405" class="config-input" placeholder="Application ID (hex)">
+                        <input type="text" id="type4Aid" value="D2760000850101" class="config-input" placeholder="Application ID (hex)">
                     </div>
                 </div>
                 <div class="type4-controls">
@@ -147,6 +152,19 @@
                         </div>
                     </div>
                 </details>
+            </section>
+
+            <!-- APDU Log Section -->
+            <section class="log-section">
+                <div class="log-header">
+                    <h2>📋 APDU Log</h2>
+                    <button class="btn btn-small btn-danger" onclick="clearApduLog()">
+                        🗑️ Clear
+                    </button>
+                </div>
+                <div class="log-list" id="apduLogList">
+                    <div class="log-empty">No APDU transactions yet</div>
+                </div>
             </section>
 
             <!-- History Section -->

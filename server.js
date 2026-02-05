@@ -51,6 +51,16 @@ app.delete('/api/history', (req, res) => {
     res.json({ success: true, message: 'History cleared' });
 });
 
+// API: Stop server
+app.post('/api/stop', (req, res) => {
+    res.json({ success: true, message: 'Server stopping' });
+    res.on('finish', () => {
+        setTimeout(() => {
+            process.exit(0);
+        }, 100);
+    });
+});
+
 // API: Get available readers
 app.get('/api/readers', async (req, res) => {
     try {
@@ -89,7 +99,7 @@ app.post('/api/lite/apdu', async (req, res) => {
 // API: Get Type 4 card info
 app.get('/api/type4/info', async (req, res) => {
     try {
-        const aid = req.query.aid || 'F00102030405';
+        const aid = req.query.aid || 'D2760000850101';
         const result = await getType4Info(aid);
         res.json(result);
     } catch (error) {
@@ -101,7 +111,7 @@ app.get('/api/type4/info', async (req, res) => {
 app.post('/api/type4/read', async (req, res) => {
     try {
         const { aid, offset, length } = req.body;
-        const result = await type4Read(aid || 'F00102030405', offset || 0, length || 16);
+        const result = await type4Read(aid || 'D2760000850101', offset || 0, length || 16);
         res.json(result);
     } catch (error) {
         res.json({ success: false, error: error.message });
@@ -115,7 +125,7 @@ app.post('/api/type4/write', async (req, res) => {
         if (!data) {
             return res.json({ success: false, error: 'Data hex string required' });
         }
-        const result = await type4Write(aid || 'F00102030405', offset || 0, data);
+        const result = await type4Write(aid || 'D2760000850101', offset || 0, data);
         res.json(result);
     } catch (error) {
         res.json({ success: false, error: error.message });

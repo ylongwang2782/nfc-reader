@@ -24,6 +24,8 @@ APDU_SELECT = [0x00, 0xA4, 0x04, 0x00]
 AID_PRIMARY_SAFETY = []  # Select with no data for primary safety
 AID_BACKUP_V1 = [0xD1, 0x56, 0x00, 0x01, 0x32, 0x83, 0x40, 0x01]
 AID_BACKUP_V2 = [0x6F, 0x6E, 0x65, 0x6B, 0x65, 0x79, 0x2E, 0x62, 0x61, 0x63, 0x6B, 0x75, 0x70, 0x01]  # "onekey.backup" + 0x01
+NDEF_APP_AID = "D2760000850101"
+NDEF_CC_FILE_ID = 0xE103
 
 
 def get_readers():
@@ -46,13 +48,15 @@ def get_readers():
 
 def read_uid(reader_index=1):
     """Read UID from NFC card"""
+    clear_apdu_log()
     try:
         r_list = readers()
 
         if len(r_list) == 0:
             return {
                 "success": False,
-                "error": "No NFC readers found"
+                "error": "No NFC readers found",
+                "apdu_log": get_apdu_log()
             }
 
         # Select reader (default to index 1 as per original script)
@@ -69,7 +73,7 @@ def read_uid(reader_index=1):
 
             # Send GET UID command
             cmd = [0xFF, 0xCA, 0x00, 0x00, 0x00]
-            data, sw1, sw2 = connection.transmit(cmd)
+            data, sw1, sw2 = send_apdu(connection, cmd)
 
             if sw1 == 0x90:
                 uid = toHexString(data)
@@ -80,44 +84,85 @@ def read_uid(reader_index=1):
                     "uid_hex": uid_no_space,
                     "uid_bytes": data,
                     "reader": reader_name,
-                    "sw": f"{sw1:02X} {sw2:02X}"
+                    "sw": f"{sw1:02X} {sw2:02X}",
+                    "apdu_log": get_apdu_log()
                 }
             else:
                 return {
                     "success": False,
                     "error": f"Read failed with status: {sw1:02X} {sw2:02X}",
-                    "reader": reader_name
+                    "reader": reader_name,
+                    "apdu_log": get_apdu_log()
                 }
 
         except NoCardException:
             return {
                 "success": False,
                 "error": "No card present - please place card on reader",
-                "reader": reader_name
+                "reader": reader_name,
+                "apdu_log": get_apdu_log()
             }
         except CardConnectionException as e:
             return {
                 "success": False,
                 "error": f"Card connection error: {str(e)}",
-                "reader": reader_name
+                "reader": reader_name,
+                "apdu_log": get_apdu_log()
             }
 
     except Exception as e:
         return {
             "success": False,
-            "error": str(e)
+            "error": str(e),
+            "apdu_log": get_apdu_log()
         }
 
 
+# Global APDU log for current session
+apdu_log = []
+
+
 def send_apdu(connection, apdu):
-    """Send APDU and return response"""
+    """Send APDU and return response, logging the exchange"""
+    apdu_hex = ''.join(f'{b:02X}' for b in apdu)
     data, sw1, sw2 = connection.transmit(apdu)
+    response_hex = ''.join(f'{b:02X}' for b in data) if data else ''
+    sw_hex = f'{sw1:02X}{sw2:02X}'
+
+    # Log the APDU exchange
+    apdu_log.append({
+        'tx': apdu_hex,
+        'rx': response_hex,
+        'sw': sw_hex
+    })
+
     return data, sw1, sw2
+
+
+def clear_apdu_log():
+    """Clear the APDU log"""
+    global apdu_log
+    apdu_log = []
+
+
+def get_apdu_log():
+    """Get current APDU log"""
+    return apdu_log.copy()
 
 
 def format_sw(sw1, sw2):
     """Format status word as hex string"""
     return f"{sw1:02X}{sw2:02X}"
+
+
+def normalize_hex_string(hex_str):
+    """Normalize hex string (remove spaces, optional 0x, upper-case)"""
+    if not hex_str:
+        return ""
+    hex_str = "".join(hex_str.split()).upper()
+    if hex_str.startswith("0X"):
+        hex_str = hex_str[2:]
+    return hex_str
 
 
 def select_primary_safety(connection):
@@ -202,10 +247,11 @@ def interpret_pin_status(status_byte, version):
 
 def get_lite_info(reader_index=1, version="v2"):
     """Get all OneKey Lite card info"""
+    clear_apdu_log()
     try:
         r_list = readers()
         if len(r_list) == 0:
-            return {"success": False, "error": "No NFC readers found"}
+            return {"success": False, "error": "No NFC readers found", "apdu_log": get_apdu_log()}
 
         if reader_index >= len(r_list):
             reader_index = 0
@@ -297,23 +343,25 @@ def get_lite_info(reader_index=1, version="v2"):
                     elif sw != "6985":  # 6985 = PIN not set, retry count N/A
                         result["errors"].append(f"get_pin_retry_count failed: {sw}")
 
+            result["apdu_log"] = get_apdu_log()
             return result
 
         except NoCardException:
-            return {"success": False, "error": "No card present - please place card on reader", "reader": reader_name}
+            return {"success": False, "error": "No card present - please place card on reader", "reader": reader_name, "apdu_log": get_apdu_log()}
         except CardConnectionException as e:
-            return {"success": False, "error": f"Card connection error: {str(e)}", "reader": reader_name}
+            return {"success": False, "error": f"Card connection error: {str(e)}", "reader": reader_name, "apdu_log": get_apdu_log()}
 
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": str(e), "apdu_log": get_apdu_log()}
 
 
 def send_raw_apdu(reader_index=1, apdu_hex=""):
     """Send raw APDU command"""
+    clear_apdu_log()
     try:
         r_list = readers()
         if len(r_list) == 0:
-            return {"success": False, "error": "No NFC readers found"}
+            return {"success": False, "error": "No NFC readers found", "apdu_log": get_apdu_log()}
 
         if reader_index >= len(r_list):
             reader_index = 0
@@ -324,7 +372,7 @@ def send_raw_apdu(reader_index=1, apdu_hex=""):
         try:
             apdu = [int(apdu_hex[i:i+2], 16) for i in range(0, len(apdu_hex), 2)]
         except ValueError:
-            return {"success": False, "error": "Invalid APDU hex string"}
+            return {"success": False, "error": "Invalid APDU hex string", "apdu_log": get_apdu_log()}
 
         try:
             connection = target_reader.createConnection()
@@ -336,22 +384,28 @@ def send_raw_apdu(reader_index=1, apdu_hex=""):
                 "reader": reader_name,
                 "apdu": apdu_hex.upper(),
                 "response": toHexString(data) if data else "",
-                "sw": format_sw(sw1, sw2)
+                "sw": format_sw(sw1, sw2),
+                "apdu_log": get_apdu_log()
             }
 
         except NoCardException:
-            return {"success": False, "error": "No card present - please place card on reader", "reader": reader_name}
+            return {"success": False, "error": "No card present - please place card on reader", "reader": reader_name, "apdu_log": get_apdu_log()}
         except CardConnectionException as e:
-            return {"success": False, "error": f"Card connection error: {str(e)}", "reader": reader_name}
+            return {"success": False, "error": f"Card connection error: {str(e)}", "reader": reader_name, "apdu_log": get_apdu_log()}
 
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": str(e), "apdu_log": get_apdu_log()}
 
 
 # Type 4 Card Functions
 def type4_select(connection, aid_hex):
     """Select application by AID"""
     try:
+        aid_hex = normalize_hex_string(aid_hex)
+        if not aid_hex:
+            return False, "0000", "Empty AID"
+        if len(aid_hex) % 2 != 0:
+            return False, "0000", "Invalid AID length"
         aid = [int(aid_hex[i:i+2], 16) for i in range(0, len(aid_hex), 2)]
     except ValueError:
         return False, "0000", "Invalid AID hex"
@@ -359,6 +413,20 @@ def type4_select(connection, aid_hex):
     data, sw1, sw2 = send_apdu(connection, apdu)
     response = toHexString(data) if data else ""
     return sw1 == 0x90, format_sw(sw1, sw2), response
+
+
+def type4_select_with_fallback(connection, aid_hex):
+    """Select AID, fallback to NDEF AID if needed"""
+    aid_hex = normalize_hex_string(aid_hex)
+    if not aid_hex:
+        aid_hex = NDEF_APP_AID
+    ok, sw, response = type4_select(connection, aid_hex)
+    if ok or aid_hex == NDEF_APP_AID:
+        return ok, sw, response, aid_hex, False
+    ok2, sw2, response2 = type4_select(connection, NDEF_APP_AID)
+    if ok2:
+        return ok2, sw2, response2, NDEF_APP_AID, True
+    return ok, sw, response, aid_hex, False
 
 
 def type4_read(connection, offset, length):
@@ -369,6 +437,15 @@ def type4_read(connection, offset, length):
     data, sw1, sw2 = send_apdu(connection, apdu)
     response = toHexString(data) if data else ""
     return sw1 == 0x90, format_sw(sw1, sw2), response
+
+
+def type4_read_bytes(connection, offset, length):
+    """Read data from card (raw bytes)"""
+    offset_hi = (offset >> 8) & 0xFF
+    offset_lo = offset & 0xFF
+    apdu = [0x00, 0xB0, offset_hi, offset_lo, length]
+    data, sw1, sw2 = send_apdu(connection, apdu)
+    return sw1 == 0x90, format_sw(sw1, sw2), data
 
 
 def type4_write(connection, offset, data_hex):
@@ -385,12 +462,50 @@ def type4_write(connection, offset, data_hex):
     return sw1 == 0x90, format_sw(sw1, sw2), response
 
 
-def get_type4_info(reader_index=1, aid_hex="F00102030405"):
+def type4_update_binary(connection, offset, data_hex):
+    """Update binary (ISO 7816-4)"""
+    try:
+        write_data = [int(data_hex[i:i+2], 16) for i in range(0, len(data_hex), 2)]
+    except ValueError:
+        return False, "0000", "Invalid data hex"
+    offset_hi = (offset >> 8) & 0xFF
+    offset_lo = offset & 0xFF
+    apdu = [0x00, 0xD6, offset_hi, offset_lo, len(write_data)] + write_data
+    data, sw1, sw2 = send_apdu(connection, apdu)
+    response = toHexString(data) if data else ""
+    return sw1 == 0x90, format_sw(sw1, sw2), response
+
+
+def type4_select_file(connection, file_id):
+    """Select file by File ID"""
+    fid = file_id & 0xFFFF
+    apdu = [0x00, 0xA4, 0x00, 0x0C, 0x02, (fid >> 8) & 0xFF, fid & 0xFF]
+    data, sw1, sw2 = send_apdu(connection, apdu)
+    response = toHexString(data) if data else ""
+    return sw1 == 0x90, format_sw(sw1, sw2), response
+
+
+def type4_get_ndef_file_id(connection):
+    """Read CC file to get NDEF File ID"""
+    ok, sw, _ = type4_select_file(connection, NDEF_CC_FILE_ID)
+    if not ok:
+        return False, sw, None
+    ok, sw, cc = type4_read_bytes(connection, 0, 15)
+    if not ok:
+        return False, sw, None
+    if cc is None or len(cc) < 11:
+        return False, sw, None
+    fid = (cc[9] << 8) | cc[10]
+    return True, "9000", fid
+
+
+def get_type4_info(reader_index=1, aid_hex=NDEF_APP_AID):
     """Get Type 4 card info - select app and read basic info"""
+    clear_apdu_log()
     try:
         r_list = readers()
         if len(r_list) == 0:
-            return {"success": False, "error": "No NFC readers found"}
+            return {"success": False, "error": "No NFC readers found", "apdu_log": get_apdu_log()}
 
         if reader_index >= len(r_list):
             reader_index = 0
@@ -416,35 +531,40 @@ def get_type4_info(reader_index=1, aid_hex="F00102030405"):
                 "reader": reader_name,
                 "atr": atr_hex,
                 "uid": uid,
-                "aid": aid_hex.upper(),
+                "aid": aid_hex.upper() if aid_hex else "",
                 "selected": False,
                 "select_sw": "",
                 "select_response": ""
             }
 
             # Select application
-            ok, sw, response = type4_select(connection, aid_hex)
+            ok, sw, response, used_aid, fallback_used = type4_select_with_fallback(connection, aid_hex)
             result["selected"] = ok
             result["select_sw"] = sw
             result["select_response"] = response
+            result["aid"] = used_aid
+            result["aid_requested"] = normalize_hex_string(aid_hex)
+            result["aid_fallback"] = fallback_used
+            result["apdu_log"] = get_apdu_log()
 
             return result
 
         except NoCardException:
-            return {"success": False, "error": "No card present - please place card on reader", "reader": reader_name}
+            return {"success": False, "error": "No card present - please place card on reader", "reader": reader_name, "apdu_log": get_apdu_log()}
         except CardConnectionException as e:
-            return {"success": False, "error": f"Card connection error: {str(e)}", "reader": reader_name}
+            return {"success": False, "error": f"Card connection error: {str(e)}", "reader": reader_name, "apdu_log": get_apdu_log()}
 
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": str(e), "apdu_log": get_apdu_log()}
 
 
-def type4_operation(reader_index=1, operation="read", aid_hex="F00102030405", offset=0, length=16, data_hex=""):
+def type4_operation(reader_index=1, operation="read", aid_hex=NDEF_APP_AID, offset=0, length=16, data_hex=""):
     """Perform Type 4 card operation"""
+    clear_apdu_log()
     try:
         r_list = readers()
         if len(r_list) == 0:
-            return {"success": False, "error": "No NFC readers found"}
+            return {"success": False, "error": "No NFC readers found", "apdu_log": get_apdu_log()}
 
         if reader_index >= len(r_list):
             reader_index = 0
@@ -462,44 +582,78 @@ def type4_operation(reader_index=1, operation="read", aid_hex="F00102030405", of
                 "operation": operation,
                 "select_ok": False,
                 "select_sw": "",
+                "aid": "",
                 "operation_ok": False,
                 "operation_sw": "",
                 "data": ""
             }
 
             # Select application first
-            ok, sw, _ = type4_select(connection, aid_hex)
+            ok, sw, _, used_aid, fallback_used = type4_select_with_fallback(connection, aid_hex)
             result["select_ok"] = ok
             result["select_sw"] = sw
+            result["aid"] = used_aid
+            result["aid_requested"] = normalize_hex_string(aid_hex)
+            result["aid_fallback"] = fallback_used
 
             if not ok:
                 result["success"] = False
                 result["error"] = f"Select failed: SW={sw}"
+                result["apdu_log"] = get_apdu_log()
                 return result
 
             # Perform operation
             if operation == "read":
+                if used_aid == NDEF_APP_AID:
+                    ok, sw, ndef_fid = type4_get_ndef_file_id(connection)
+                    if not ok:
+                        result["success"] = False
+                        result["error"] = f"Select CC failed: SW={sw}"
+                        result["apdu_log"] = get_apdu_log()
+                        return result
+                    ok, sw, _ = type4_select_file(connection, ndef_fid)
+                    if not ok:
+                        result["success"] = False
+                        result["error"] = f"Select NDEF file failed: SW={sw}"
+                        result["apdu_log"] = get_apdu_log()
+                        return result
                 ok, sw, data = type4_read(connection, offset, length)
                 result["operation_ok"] = ok
                 result["operation_sw"] = sw
                 result["data"] = data
             elif operation == "write":
-                ok, sw, _ = type4_write(connection, offset, data_hex)
+                if used_aid == NDEF_APP_AID:
+                    ok, sw, ndef_fid = type4_get_ndef_file_id(connection)
+                    if not ok:
+                        result["success"] = False
+                        result["error"] = f"Select CC failed: SW={sw}"
+                        result["apdu_log"] = get_apdu_log()
+                        return result
+                    ok, sw, _ = type4_select_file(connection, ndef_fid)
+                    if not ok:
+                        result["success"] = False
+                        result["error"] = f"Select NDEF file failed: SW={sw}"
+                        result["apdu_log"] = get_apdu_log()
+                        return result
+                    ok, sw, _ = type4_update_binary(connection, offset, data_hex)
+                else:
+                    ok, sw, _ = type4_write(connection, offset, data_hex)
                 result["operation_ok"] = ok
                 result["operation_sw"] = sw
             else:
                 result["success"] = False
                 result["error"] = f"Unknown operation: {operation}"
 
+            result["apdu_log"] = get_apdu_log()
             return result
 
         except NoCardException:
-            return {"success": False, "error": "No card present - please place card on reader", "reader": reader_name}
+            return {"success": False, "error": "No card present - please place card on reader", "reader": reader_name, "apdu_log": get_apdu_log()}
         except CardConnectionException as e:
-            return {"success": False, "error": f"Card connection error: {str(e)}", "reader": reader_name}
+            return {"success": False, "error": f"Card connection error: {str(e)}", "reader": reader_name, "apdu_log": get_apdu_log()}
 
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": str(e), "apdu_log": get_apdu_log()}
 
 
 def main():
@@ -544,7 +698,7 @@ Examples:
 
     # type4 command
     type4_parser = subparsers.add_parser('type4', help='Type 4 card operations')
-    type4_parser.add_argument('-a', '--aid', default='F00102030405', help='Application ID in hex (default: F00102030405)')
+    type4_parser.add_argument('-a', '--aid', default=NDEF_APP_AID, help='Application ID in hex (default: NDEF AID)')
     type4_sub = type4_parser.add_subparsers(dest='type4_cmd', help='Type 4 operations')
 
     # type4 read

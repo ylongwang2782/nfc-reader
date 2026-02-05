@@ -2,6 +2,7 @@
 let currentUid = '';
 let isReading = false;
 let isReadingLite = false;
+let apduLogEntries = [];
 
 // DOM Elements
 const statusIndicator = document.getElementById('statusIndicator');
@@ -16,6 +17,8 @@ const liteInfo = document.getElementById('liteInfo');
 const readLiteBtn = document.getElementById('readLiteBtn');
 const apduInput = document.getElementById('apduInput');
 const apduOutput = document.getElementById('apduOutput');
+const stopServerBtn = document.getElementById('stopServerBtn');
+const apduLogList = document.getElementById('apduLogList');
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
@@ -36,6 +39,65 @@ function showToast(message, type = 'success') {
     setTimeout(() => {
         toast.className = 'toast';
     }, 3000);
+}
+
+// APDU Log functions
+function addApduLogEntries(logs, operation) {
+    if (!logs || logs.length === 0) return;
+
+    const timestamp = new Date().toLocaleTimeString();
+    logs.forEach((log, index) => {
+        apduLogEntries.unshift({
+            timestamp,
+            operation,
+            index: index + 1,
+            total: logs.length,
+            tx: log.tx,
+            rx: log.rx,
+            sw: log.sw
+        });
+    });
+
+    // Keep only last 100 entries
+    if (apduLogEntries.length > 100) {
+        apduLogEntries = apduLogEntries.slice(0, 100);
+    }
+
+    renderApduLog();
+}
+
+function renderApduLog() {
+    if (apduLogEntries.length === 0) {
+        apduLogList.innerHTML = '<div class="log-empty">No APDU transactions yet</div>';
+        return;
+    }
+
+    apduLogList.innerHTML = apduLogEntries.map(entry => {
+        const swClass = entry.sw === '9000' ? 'sw-ok' : 'sw-err';
+        const itemClass = entry.sw === '9000' ? 'success' : 'error';
+        return `
+            <div class="log-item ${itemClass}">
+                <div class="log-timestamp">${entry.timestamp} - ${entry.operation} (${entry.index}/${entry.total})</div>
+                <div class="log-tx"><span class="log-label">TX:</span><span class="log-value">${entry.tx}</span></div>
+                <div class="log-rx"><span class="log-label">RX:</span><span class="log-value">${entry.rx || '(empty)'}</span></div>
+                <div class="log-sw ${swClass}"><span class="log-label">SW:</span><span class="log-value">${entry.sw}</span></div>
+            </div>
+        `;
+    }).join('');
+}
+
+function clearApduLog() {
+    apduLogEntries = [];
+    renderApduLog();
+    showToast('APDU log cleared', 'success');
+}
+
+function disableControls() {
+    document.querySelectorAll('button').forEach((btn) => {
+        if (btn.id !== 'stopServerBtn') {
+            btn.disabled = true;
+        }
+    });
 }
 
 // Refresh readers
@@ -88,6 +150,11 @@ async function readUid() {
     try {
         const response = await fetch('/api/uid');
         const data = await response.json();
+
+        // Log APDU transactions
+        if (data.apdu_log) {
+            addApduLogEntries(data.apdu_log, 'Read UID');
+        }
 
         if (data.success) {
             currentUid = data.uid;
@@ -190,6 +257,25 @@ async function clearHistory() {
     }
 }
 
+// Stop server
+async function stopServer() {
+    if (!confirm('Stop the NFC Reader server?')) return;
+
+    stopServerBtn.disabled = true;
+    setStatus('reading', 'Stopping...');
+
+    try {
+        const response = await fetch('/api/stop', { method: 'POST' });
+        const data = await response.json();
+        showToast(data.message || 'Server stopping...', 'success');
+    } catch (error) {
+        showToast('Server stopped or unreachable', 'success');
+    } finally {
+        setStatus('error', 'Stopped');
+        disableControls();
+    }
+}
+
 // Read OneKey Lite info
 async function readLiteInfo() {
     if (isReadingLite) return;
@@ -205,6 +291,11 @@ async function readLiteInfo() {
         const version = liteVersion.value;
         const response = await fetch(`/api/lite/info?version=${version}`);
         const data = await response.json();
+
+        // Log APDU transactions
+        if (data.apdu_log) {
+            addApduLogEntries(data.apdu_log, 'Lite Info');
+        }
 
         if (data.success) {
             const pinStatusClass = data.pin_status === 'set' ? 'status-set' : 'status-not-set';
@@ -279,6 +370,11 @@ async function sendApdu() {
         });
         const data = await response.json();
 
+        // Log APDU transactions
+        if (data.apdu_log) {
+            addApduLogEntries(data.apdu_log, 'Raw APDU');
+        }
+
         if (data.success) {
             apduOutput.innerHTML = `
                 <div class="apdu-result">
@@ -318,8 +414,32 @@ async function readType4Info() {
         const response = await fetch(`/api/type4/info?aid=${aid}`);
         const data = await response.json();
 
+        // Log APDU transactions
+        if (data.apdu_log) {
+            addApduLogEntries(data.apdu_log, 'Type4 Connect');
+        }
+
         if (data.success) {
             const selectedClass = data.selected ? 'status-set' : 'status-not-set';
+            const usedAid = data.aid || 'N/A';
+            const requestedAid = data.aid_requested || '';
+            const aidHtml = requestedAid && requestedAid !== usedAid
+                ? `
+                    <div class="info-item">
+                        <span class="info-label">AID (Used)</span>
+                        <span class="info-value">${usedAid}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">AID (Requested)</span>
+                        <span class="info-value">${requestedAid}</span>
+                    </div>
+                `
+                : `
+                    <div class="info-item">
+                        <span class="info-label">AID</span>
+                        <span class="info-value">${usedAid}</span>
+                    </div>
+                `;
             type4Info.innerHTML = `
                 <div class="type4-info-grid">
                     <div class="info-item">
@@ -330,10 +450,7 @@ async function readType4Info() {
                         <span class="info-label">ATR</span>
                         <span class="info-value atr-value">${data.atr || 'N/A'}</span>
                     </div>
-                    <div class="info-item">
-                        <span class="info-label">AID</span>
-                        <span class="info-value">${data.aid || 'N/A'}</span>
-                    </div>
+                    ${aidHtml}
                     <div class="info-item">
                         <span class="info-label">Select Status</span>
                         <span class="info-value ${selectedClass}">${data.selected ? 'OK' : 'Failed'} (${data.select_sw})</span>
@@ -395,6 +512,11 @@ async function type4Read() {
         });
         const data = await response.json();
 
+        // Log APDU transactions
+        if (data.apdu_log) {
+            addApduLogEntries(data.apdu_log, 'Type4 Read');
+        }
+
         if (data.success && data.operation_ok) {
             resultDiv.innerHTML = `
                 <div class="result-success">
@@ -431,6 +553,11 @@ async function type4Write() {
             body: JSON.stringify({ aid, offset, data: dataHex })
         });
         const data = await response.json();
+
+        // Log APDU transactions
+        if (data.apdu_log) {
+            addApduLogEntries(data.apdu_log, 'Type4 Write');
+        }
 
         if (data.success && data.operation_ok) {
             resultDiv.innerHTML = `
