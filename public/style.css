@@ -901,33 +901,60 @@ footer {
     margin-bottom: 4px;
 }
 
-.log-tx {
-    color: #60a5fa;
+.log-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
     margin-bottom: 2px;
 }
 
-.log-rx {
-    color: #34d399;
-    margin-bottom: 2px;
+.log-type {
+    font-weight: bold;
+    min-width: 70px;
+    flex-shrink: 0;
 }
 
-.log-sw {
-    color: var(--text-muted);
-}
-
-.log-sw.sw-ok {
-    color: var(--success-color);
-}
-
-.log-sw.sw-err {
-    color: var(--danger-color);
-}
-
-.log-label {
-    color: var(--text-muted);
-    margin-right: 4px;
-}
-
-.log-value {
+.log-data {
     word-break: break-all;
+    flex: 1;
+}
+
+.log-desc {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+.log-tx .log-type {
+    color: #60a5fa;
+}
+
+.log-tx .log-data {
+    color: #93c5fd;
+}
+
+.log-rx .log-type {
+    color: #34d399;
+}
+
+.log-rx .log-data {
+    color: #6ee7b7;
+}
+
+.log-atr .log-type {
+    color: #fbbf24;
+}
+
+.log-atr .log-data {
+    color: #fcd34d;
+}
+
+.log-connect .log-type,
+.log-connected .log-type {
+    color: #a78bfa;
+}
+
+.log-connect .log-data,
+.log-connected .log-data {
+    color: #c4b5fd;
 }

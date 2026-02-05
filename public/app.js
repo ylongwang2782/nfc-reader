@@ -41,8 +41,8 @@ function showToast(message, type = 'success') {
     }, 3000);
 }
 
-// APDU Log functions
-function addApduLogEntries(logs, operation) {
+// Communication Log functions
+function addCommLogEntries(logs, operation) {
     if (!logs || logs.length === 0) return;
 
     const timestamp = new Date().toLocaleTimeString();
@@ -52,44 +52,66 @@ function addApduLogEntries(logs, operation) {
             operation,
             index: index + 1,
             total: logs.length,
-            tx: log.tx,
-            rx: log.rx,
-            sw: log.sw
+            type: log.type,
+            data: log.data,
+            desc: log.desc
         });
     });
 
-    // Keep only last 100 entries
-    if (apduLogEntries.length > 100) {
-        apduLogEntries = apduLogEntries.slice(0, 100);
+    // Keep only last 200 entries
+    if (apduLogEntries.length > 200) {
+        apduLogEntries = apduLogEntries.slice(0, 200);
     }
 
-    renderApduLog();
+    renderCommLog();
 }
 
-function renderApduLog() {
+function renderCommLog() {
     if (apduLogEntries.length === 0) {
-        apduLogList.innerHTML = '<div class="log-empty">No APDU transactions yet</div>';
+        apduLogList.innerHTML = '<div class="log-empty">No communication data yet</div>';
         return;
     }
 
     apduLogList.innerHTML = apduLogEntries.map(entry => {
-        const swClass = entry.sw === '9000' ? 'sw-ok' : 'sw-err';
-        const itemClass = entry.sw === '9000' ? 'success' : 'error';
+        const typeClass = getTypeClass(entry.type);
+        const itemClass = getItemClass(entry.type, entry.data);
         return `
             <div class="log-item ${itemClass}">
                 <div class="log-timestamp">${entry.timestamp} - ${entry.operation} (${entry.index}/${entry.total})</div>
-                <div class="log-tx"><span class="log-label">TX:</span><span class="log-value">${entry.tx}</span></div>
-                <div class="log-rx"><span class="log-label">RX:</span><span class="log-value">${entry.rx || '(empty)'}</span></div>
-                <div class="log-sw ${swClass}"><span class="log-label">SW:</span><span class="log-value">${entry.sw}</span></div>
+                <div class="log-row ${typeClass}">
+                    <span class="log-type">${entry.type}</span>
+                    <span class="log-data">${entry.data || '(none)'}</span>
+                </div>
+                ${entry.desc ? `<div class="log-desc">${entry.desc}</div>` : ''}
             </div>
         `;
     }).join('');
 }
 
+function getTypeClass(type) {
+    switch (type) {
+        case 'TX': return 'log-tx';
+        case 'RX': return 'log-rx';
+        case 'ATR': return 'log-atr';
+        case 'CONNECT': return 'log-connect';
+        case 'CONNECTED': return 'log-connected';
+        default: return '';
+    }
+}
+
+function getItemClass(type, data) {
+    if (type === 'RX' && data) {
+        const sw = data.slice(-4);
+        return sw === '9000' ? 'success' : 'error';
+    }
+    if (type === 'ATR' || type === 'CONNECTED') return 'success';
+    return '';
+}
+
 function clearApduLog() {
     apduLogEntries = [];
-    renderApduLog();
-    showToast('APDU log cleared', 'success');
+    renderCommLog();
+    showToast('Log cleared', 'success');
 }
 
 function disableControls() {
@@ -152,8 +174,8 @@ async function readUid() {
         const data = await response.json();
 
         // Log APDU transactions
-        if (data.apdu_log) {
-            addApduLogEntries(data.apdu_log, 'Read UID');
+        if (data.comm_log) {
+            addCommLogEntries(data.comm_log, 'Read UID');
         }
 
         if (data.success) {
@@ -293,8 +315,8 @@ async function readLiteInfo() {
         const data = await response.json();
 
         // Log APDU transactions
-        if (data.apdu_log) {
-            addApduLogEntries(data.apdu_log, 'Lite Info');
+        if (data.comm_log) {
+            addCommLogEntries(data.comm_log, 'Lite Info');
         }
 
         if (data.success) {
@@ -371,8 +393,8 @@ async function sendApdu() {
         const data = await response.json();
 
         // Log APDU transactions
-        if (data.apdu_log) {
-            addApduLogEntries(data.apdu_log, 'Raw APDU');
+        if (data.comm_log) {
+            addCommLogEntries(data.comm_log, 'Raw APDU');
         }
 
         if (data.success) {
@@ -415,8 +437,8 @@ async function readType4Info() {
         const data = await response.json();
 
         // Log APDU transactions
-        if (data.apdu_log) {
-            addApduLogEntries(data.apdu_log, 'Type4 Connect');
+        if (data.comm_log) {
+            addCommLogEntries(data.comm_log, 'Type4 Connect');
         }
 
         if (data.success) {
@@ -513,8 +535,8 @@ async function type4Read() {
         const data = await response.json();
 
         // Log APDU transactions
-        if (data.apdu_log) {
-            addApduLogEntries(data.apdu_log, 'Type4 Read');
+        if (data.comm_log) {
+            addCommLogEntries(data.comm_log, 'Type4 Read');
         }
 
         if (data.success && data.operation_ok) {
@@ -555,8 +577,8 @@ async function type4Write() {
         const data = await response.json();
 
         // Log APDU transactions
-        if (data.apdu_log) {
-            addApduLogEntries(data.apdu_log, 'Type4 Write');
+        if (data.comm_log) {
+            addCommLogEntries(data.comm_log, 'Type4 Write');
         }
 
         if (data.success && data.operation_ok) {

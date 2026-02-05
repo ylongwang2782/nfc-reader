@@ -48,7 +48,7 @@ def get_readers():
 
 def read_uid(reader_index=1):
     """Read UID from NFC card"""
-    clear_apdu_log()
+    clear_comm_log()
     try:
         r_list = readers()
 
@@ -56,7 +56,7 @@ def read_uid(reader_index=1):
             return {
                 "success": False,
                 "error": "No NFC readers found",
-                "apdu_log": get_apdu_log()
+                "comm_log": get_comm_log()
             }
 
         # Select reader (default to index 1 as per original script)
@@ -69,7 +69,10 @@ def read_uid(reader_index=1):
         try:
             # Create connection
             connection = target_reader.createConnection()
+            log_event('CONNECT', reader_name, 'Connecting to reader')
             connection.connect()
+            log_event('CONNECTED', '', 'Connection established')
+            log_connection(connection)
 
             # Send GET UID command
             cmd = [0xFF, 0xCA, 0x00, 0x00, 0x00]
@@ -85,14 +88,14 @@ def read_uid(reader_index=1):
                     "uid_bytes": data,
                     "reader": reader_name,
                     "sw": f"{sw1:02X} {sw2:02X}",
-                    "apdu_log": get_apdu_log()
+                    "comm_log": get_comm_log()
                 }
             else:
                 return {
                     "success": False,
                     "error": f"Read failed with status: {sw1:02X} {sw2:02X}",
                     "reader": reader_name,
-                    "apdu_log": get_apdu_log()
+                    "comm_log": get_comm_log()
                 }
 
         except NoCardException:
@@ -100,26 +103,35 @@ def read_uid(reader_index=1):
                 "success": False,
                 "error": "No card present - please place card on reader",
                 "reader": reader_name,
-                "apdu_log": get_apdu_log()
+                "comm_log": get_comm_log()
             }
         except CardConnectionException as e:
             return {
                 "success": False,
                 "error": f"Card connection error: {str(e)}",
                 "reader": reader_name,
-                "apdu_log": get_apdu_log()
+                "comm_log": get_comm_log()
             }
 
     except Exception as e:
         return {
             "success": False,
             "error": str(e),
-            "apdu_log": get_apdu_log()
+            "comm_log": get_comm_log()
         }
 
 
-# Global APDU log for current session
-apdu_log = []
+# Global communication log for current session
+comm_log = []
+
+
+def log_event(event_type, data, description=""):
+    """Log a communication event"""
+    comm_log.append({
+        'type': event_type,
+        'data': data,
+        'desc': description
+    })
 
 
 def send_apdu(connection, apdu):
@@ -130,24 +142,33 @@ def send_apdu(connection, apdu):
     sw_hex = f'{sw1:02X}{sw2:02X}'
 
     # Log the APDU exchange
-    apdu_log.append({
-        'tx': apdu_hex,
-        'rx': response_hex,
-        'sw': sw_hex
-    })
+    log_event('TX', apdu_hex, 'APDU Command')
+    log_event('RX', response_hex + sw_hex, f'Response + SW')
 
     return data, sw1, sw2
 
 
-def clear_apdu_log():
-    """Clear the APDU log"""
-    global apdu_log
-    apdu_log = []
+def clear_comm_log():
+    """Clear the communication log"""
+    global comm_log
+    comm_log = []
 
 
-def get_apdu_log():
-    """Get current APDU log"""
-    return apdu_log.copy()
+def get_comm_log():
+    """Get current communication log"""
+    return comm_log.copy()
+
+
+def log_connection(connection):
+    """Log connection establishment details"""
+    try:
+        # Get ATR (Answer To Reset)
+        atr = connection.getATR()
+        if atr:
+            atr_hex = ''.join(f'{b:02X}' for b in atr)
+            log_event('ATR', atr_hex, 'Answer To Reset')
+    except Exception:
+        pass
 
 
 def format_sw(sw1, sw2):
@@ -247,11 +268,11 @@ def interpret_pin_status(status_byte, version):
 
 def get_lite_info(reader_index=1, version="v2"):
     """Get all OneKey Lite card info"""
-    clear_apdu_log()
+    clear_comm_log()
     try:
         r_list = readers()
         if len(r_list) == 0:
-            return {"success": False, "error": "No NFC readers found", "apdu_log": get_apdu_log()}
+            return {"success": False, "error": "No NFC readers found", "comm_log": get_comm_log()}
 
         if reader_index >= len(r_list):
             reader_index = 0
@@ -261,7 +282,10 @@ def get_lite_info(reader_index=1, version="v2"):
 
         try:
             connection = target_reader.createConnection()
+            log_event('CONNECT', reader_name, 'Connecting to reader')
             connection.connect()
+            log_event('CONNECTED', '', 'Connection established')
+            log_connection(connection)
 
             result = {
                 "success": True,
@@ -343,25 +367,25 @@ def get_lite_info(reader_index=1, version="v2"):
                     elif sw != "6985":  # 6985 = PIN not set, retry count N/A
                         result["errors"].append(f"get_pin_retry_count failed: {sw}")
 
-            result["apdu_log"] = get_apdu_log()
+            result["comm_log"] = get_comm_log()
             return result
 
         except NoCardException:
-            return {"success": False, "error": "No card present - please place card on reader", "reader": reader_name, "apdu_log": get_apdu_log()}
+            return {"success": False, "error": "No card present - please place card on reader", "reader": reader_name, "comm_log": get_comm_log()}
         except CardConnectionException as e:
-            return {"success": False, "error": f"Card connection error: {str(e)}", "reader": reader_name, "apdu_log": get_apdu_log()}
+            return {"success": False, "error": f"Card connection error: {str(e)}", "reader": reader_name, "comm_log": get_comm_log()}
 
     except Exception as e:
-        return {"success": False, "error": str(e), "apdu_log": get_apdu_log()}
+        return {"success": False, "error": str(e), "comm_log": get_comm_log()}
 
 
 def send_raw_apdu(reader_index=1, apdu_hex=""):
     """Send raw APDU command"""
-    clear_apdu_log()
+    clear_comm_log()
     try:
         r_list = readers()
         if len(r_list) == 0:
-            return {"success": False, "error": "No NFC readers found", "apdu_log": get_apdu_log()}
+            return {"success": False, "error": "No NFC readers found", "comm_log": get_comm_log()}
 
         if reader_index >= len(r_list):
             reader_index = 0
@@ -372,11 +396,14 @@ def send_raw_apdu(reader_index=1, apdu_hex=""):
         try:
             apdu = [int(apdu_hex[i:i+2], 16) for i in range(0, len(apdu_hex), 2)]
         except ValueError:
-            return {"success": False, "error": "Invalid APDU hex string", "apdu_log": get_apdu_log()}
+            return {"success": False, "error": "Invalid APDU hex string", "comm_log": get_comm_log()}
 
         try:
             connection = target_reader.createConnection()
+            log_event('CONNECT', reader_name, 'Connecting to reader')
             connection.connect()
+            log_event('CONNECTED', '', 'Connection established')
+            log_connection(connection)
 
             data, sw1, sw2 = send_apdu(connection, apdu)
             return {
@@ -385,16 +412,16 @@ def send_raw_apdu(reader_index=1, apdu_hex=""):
                 "apdu": apdu_hex.upper(),
                 "response": toHexString(data) if data else "",
                 "sw": format_sw(sw1, sw2),
-                "apdu_log": get_apdu_log()
+                "comm_log": get_comm_log()
             }
 
         except NoCardException:
-            return {"success": False, "error": "No card present - please place card on reader", "reader": reader_name, "apdu_log": get_apdu_log()}
+            return {"success": False, "error": "No card present - please place card on reader", "reader": reader_name, "comm_log": get_comm_log()}
         except CardConnectionException as e:
-            return {"success": False, "error": f"Card connection error: {str(e)}", "reader": reader_name, "apdu_log": get_apdu_log()}
+            return {"success": False, "error": f"Card connection error: {str(e)}", "reader": reader_name, "comm_log": get_comm_log()}
 
     except Exception as e:
-        return {"success": False, "error": str(e), "apdu_log": get_apdu_log()}
+        return {"success": False, "error": str(e), "comm_log": get_comm_log()}
 
 
 # Type 4 Card Functions
@@ -501,11 +528,11 @@ def type4_get_ndef_file_id(connection):
 
 def get_type4_info(reader_index=1, aid_hex=NDEF_APP_AID):
     """Get Type 4 card info - select app and read basic info"""
-    clear_apdu_log()
+    clear_comm_log()
     try:
         r_list = readers()
         if len(r_list) == 0:
-            return {"success": False, "error": "No NFC readers found", "apdu_log": get_apdu_log()}
+            return {"success": False, "error": "No NFC readers found", "comm_log": get_comm_log()}
 
         if reader_index >= len(r_list):
             reader_index = 0
@@ -515,7 +542,10 @@ def get_type4_info(reader_index=1, aid_hex=NDEF_APP_AID):
 
         try:
             connection = target_reader.createConnection()
+            log_event('CONNECT', reader_name, 'Connecting to reader')
             connection.connect()
+            log_event('CONNECTED', '', 'Connection established')
+            log_connection(connection)
 
             # Get ATR
             atr = connection.getATR()
@@ -545,26 +575,26 @@ def get_type4_info(reader_index=1, aid_hex=NDEF_APP_AID):
             result["aid"] = used_aid
             result["aid_requested"] = normalize_hex_string(aid_hex)
             result["aid_fallback"] = fallback_used
-            result["apdu_log"] = get_apdu_log()
+            result["comm_log"] = get_comm_log()
 
             return result
 
         except NoCardException:
-            return {"success": False, "error": "No card present - please place card on reader", "reader": reader_name, "apdu_log": get_apdu_log()}
+            return {"success": False, "error": "No card present - please place card on reader", "reader": reader_name, "comm_log": get_comm_log()}
         except CardConnectionException as e:
-            return {"success": False, "error": f"Card connection error: {str(e)}", "reader": reader_name, "apdu_log": get_apdu_log()}
+            return {"success": False, "error": f"Card connection error: {str(e)}", "reader": reader_name, "comm_log": get_comm_log()}
 
     except Exception as e:
-        return {"success": False, "error": str(e), "apdu_log": get_apdu_log()}
+        return {"success": False, "error": str(e), "comm_log": get_comm_log()}
 
 
 def type4_operation(reader_index=1, operation="read", aid_hex=NDEF_APP_AID, offset=0, length=16, data_hex=""):
     """Perform Type 4 card operation"""
-    clear_apdu_log()
+    clear_comm_log()
     try:
         r_list = readers()
         if len(r_list) == 0:
-            return {"success": False, "error": "No NFC readers found", "apdu_log": get_apdu_log()}
+            return {"success": False, "error": "No NFC readers found", "comm_log": get_comm_log()}
 
         if reader_index >= len(r_list):
             reader_index = 0
@@ -574,7 +604,10 @@ def type4_operation(reader_index=1, operation="read", aid_hex=NDEF_APP_AID, offs
 
         try:
             connection = target_reader.createConnection()
+            log_event('CONNECT', reader_name, 'Connecting to reader')
             connection.connect()
+            log_event('CONNECTED', '', 'Connection established')
+            log_connection(connection)
 
             result = {
                 "success": True,
@@ -599,7 +632,7 @@ def type4_operation(reader_index=1, operation="read", aid_hex=NDEF_APP_AID, offs
             if not ok:
                 result["success"] = False
                 result["error"] = f"Select failed: SW={sw}"
-                result["apdu_log"] = get_apdu_log()
+                result["comm_log"] = get_comm_log()
                 return result
 
             # Perform operation
@@ -609,13 +642,13 @@ def type4_operation(reader_index=1, operation="read", aid_hex=NDEF_APP_AID, offs
                     if not ok:
                         result["success"] = False
                         result["error"] = f"Select CC failed: SW={sw}"
-                        result["apdu_log"] = get_apdu_log()
+                        result["comm_log"] = get_comm_log()
                         return result
                     ok, sw, _ = type4_select_file(connection, ndef_fid)
                     if not ok:
                         result["success"] = False
                         result["error"] = f"Select NDEF file failed: SW={sw}"
-                        result["apdu_log"] = get_apdu_log()
+                        result["comm_log"] = get_comm_log()
                         return result
                 ok, sw, data = type4_read(connection, offset, length)
                 result["operation_ok"] = ok
@@ -627,13 +660,13 @@ def type4_operation(reader_index=1, operation="read", aid_hex=NDEF_APP_AID, offs
                     if not ok:
                         result["success"] = False
                         result["error"] = f"Select CC failed: SW={sw}"
-                        result["apdu_log"] = get_apdu_log()
+                        result["comm_log"] = get_comm_log()
                         return result
                     ok, sw, _ = type4_select_file(connection, ndef_fid)
                     if not ok:
                         result["success"] = False
                         result["error"] = f"Select NDEF file failed: SW={sw}"
-                        result["apdu_log"] = get_apdu_log()
+                        result["comm_log"] = get_comm_log()
                         return result
                     ok, sw, _ = type4_update_binary(connection, offset, data_hex)
                 else:
@@ -644,16 +677,16 @@ def type4_operation(reader_index=1, operation="read", aid_hex=NDEF_APP_AID, offs
                 result["success"] = False
                 result["error"] = f"Unknown operation: {operation}"
 
-            result["apdu_log"] = get_apdu_log()
+            result["comm_log"] = get_comm_log()
             return result
 
         except NoCardException:
-            return {"success": False, "error": "No card present - please place card on reader", "reader": reader_name, "apdu_log": get_apdu_log()}
+            return {"success": False, "error": "No card present - please place card on reader", "reader": reader_name, "comm_log": get_comm_log()}
         except CardConnectionException as e:
-            return {"success": False, "error": f"Card connection error: {str(e)}", "reader": reader_name, "apdu_log": get_apdu_log()}
+            return {"success": False, "error": f"Card connection error: {str(e)}", "reader": reader_name, "comm_log": get_comm_log()}
 
     except Exception as e:
-        return {"success": False, "error": str(e), "apdu_log": get_apdu_log()}
+        return {"success": False, "error": str(e), "comm_log": get_comm_log()}
 
 
 def main():
